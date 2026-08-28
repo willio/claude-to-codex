@@ -21,6 +21,7 @@ INIT → PLAN → EXECUTING → EXECUTED → REVIEW → PLAN | DONE | BLOCKED | 
 | DONE | ChatGPT | Success criteria met |
 | BLOCKED | ChatGPT | Cannot proceed; contains reason |
 | ERROR | either | Protocol/infrastructure failure |
+| HANDOFF | Codex | Continuation brief sent to a replacement conversation |
 
 ## Message format
 
@@ -123,6 +124,37 @@ NEEDS:
 ...
 ```
 
+### HANDOFF (Codex → new ChatGPT conversation)
+
+One workspace keeps one long-lived C2C conversation (`c2c session get/set`).
+Codex switches to a new chat only when the user asks for it or the old chat has
+grown long enough to lag. Right after the boot prompt, Codex sends a HANDOFF so
+the new chat can continue seamlessly — a brief, never a data dump (the new chat
+re-reads code via MCP):
+
+```
+[C2C]
+STATE: HANDOFF
+TASK_ID: c2c_f81a
+ITERATION: 4
+
+ORIGINAL_GOAL:
+Implement dark mode with a persisted user preference.
+
+PROGRESS:
+- Iter 1-2: theme context + toggle implemented, reviewed OK.
+- Iter 3: persistence added; review found the toggle flashes on load.
+
+CURRENT_STATE:
+EXECUTED (iteration 4 fix applied, not yet reviewed).
+
+KNOWN_ISSUES:
+Flash-on-load fix needs verification in src/theme/ThemeProvider.tsx.
+
+NEXT_EXPECTED_STEP:
+Independently review iteration 4 via git_diff and reply PLAN or DONE.
+```
+
 ## Loop limits
 
 `maxIterations` (default 12, configurable in `.c2c.json`). When reached, Codex
@@ -153,4 +185,12 @@ Rules:
 8. Continue until the implementation satisfies the success criteria.
 9. Avoid unnecessary rewrites.
 10. Return C2C structured control messages.
+11. Be substantive. PLAN and review replies must carry enough signal for
+    Codex to act on: rationale, per-file natural-language suggestions
+    (which file, what to change and why), risks worth checking, and test
+    advice. Never reply with a bare one-liner. Substance over length —
+    but do not generate 40-step epics either.
+12. If you receive a HANDOFF message, this conversation continues an
+    existing task. Trust the handoff brief for history, re-read any code
+    you need through MCP, and resume from NEXT_EXPECTED_STEP.
 ```

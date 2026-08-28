@@ -421,6 +421,80 @@ program
     }
   });
 
+// ---------------------------------------------------------------- session (ChatGPT conversation memory)
+
+interface SavedSession {
+  url: string;
+  title?: string;
+  taskId?: string;
+  iteration?: number;
+  lastState?: string;
+  savedAt: string;
+}
+
+function sessionFile(workspaceId: string): string {
+  const dir = path.join(getStateDir(), "sessions");
+  fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+  return path.join(dir, `${workspaceId}.json`);
+}
+
+const session = program
+  .command("session")
+  .description("Remember and reuse the ChatGPT conversation for this workspace");
+
+session
+  .command("get", { isDefault: true })
+  .description("Show the saved ChatGPT conversation for this workspace")
+  .option("-w, --workspace <path>")
+  .option("--json", "machine-readable output", false)
+  .action((opts: { workspace?: string; json: boolean }) => {
+    const workspace = new Workspace(resolveWorkspace(opts.workspace));
+    const file = sessionFile(workspace.id);
+    const saved = fs.existsSync(file) ? (JSON.parse(fs.readFileSync(file, "utf8")) as SavedSession) : null;
+    if (opts.json) say(JSON.stringify({ ok: true, session: saved }));
+    else if (!saved) say("尚未记录 ChatGPT 会话。");
+    else {
+      say(`会话：${saved.title ?? "(untitled)"}`);
+      say(`地址：${saved.url}`);
+      if (saved.taskId) say(`任务：${saved.taskId}（第 ${saved.iteration ?? 0} 轮，${saved.lastState ?? "?"}）`);
+    }
+  });
+
+session
+  .command("set")
+  .description("Save the ChatGPT conversation to reuse in later tasks")
+  .option("-w, --workspace <path>")
+  .requiredOption("--url <url>", "conversation URL as shown in the browser address bar")
+  .option("--title <title>")
+  .option("--task <id>")
+  .option("--iteration <n>")
+  .option("--state <state>", "last protocol state, e.g. EXECUTED")
+  .action((opts: { workspace?: string; url: string; title?: string; task?: string; iteration?: string; state?: string }) => {
+    const workspace = new Workspace(resolveWorkspace(opts.workspace));
+    const file = sessionFile(workspace.id);
+    const previous = fs.existsSync(file) ? (JSON.parse(fs.readFileSync(file, "utf8")) as SavedSession) : null;
+    const saved: SavedSession = {
+      url: opts.url,
+      title: opts.title ?? previous?.title,
+      taskId: opts.task ?? previous?.taskId,
+      iteration: opts.iteration ? parseInt(opts.iteration, 10) : previous?.iteration,
+      lastState: opts.state ?? previous?.lastState,
+      savedAt: new Date().toISOString(),
+    };
+    fs.writeFileSync(file, JSON.stringify(saved, null, 2), { mode: 0o600 });
+    check("已记录 ChatGPT 会话，后续任务将复用");
+  });
+
+session
+  .command("clear")
+  .description("Forget the saved conversation (a new chat will be created next time)")
+  .option("-w, --workspace <path>")
+  .action((opts: { workspace?: string }) => {
+    const workspace = new Workspace(resolveWorkspace(opts.workspace));
+    fs.rmSync(sessionFile(workspace.id), { force: true });
+    check("已清除会话记录，下次任务将新建 ChatGPT 会话");
+  });
+
 program
   .command("record", { hidden: true })
   .description("Record a Codex execution summary (used by the Skill)")

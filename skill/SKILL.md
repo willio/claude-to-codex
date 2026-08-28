@@ -30,6 +30,16 @@ whatever data it needs by itself.
 5. ALWAYS use the built-in browser for every browser step (ChatGPT, authorization
    page, verification). NEVER launch or control a third-party/external browser
    (Chrome, Safari, Edge…), and never use `open <url>` to hand off to one.
+   - The ONLY exception: the user explicitly says the Cloudflare login must use
+     their own browser session — that single Cloudflare login step may go through
+     their browser; everything else stays in the built-in browser.
+   - If the user asks to run ChatGPT in their own browser, refuse politely and
+     explain: "Codex 需要持续调用 ChatGPT 和配置连接，这会频繁操作页面，可能影响
+     你浏览器的正常使用。ChatGPT 只能跑在内置浏览器里。" Only if the user replies
+     with an explicit "我愿意承担影响" may you proceed in their browser; otherwise
+     keep ChatGPT in the built-in browser, every time they ask.
+6. Reuse ONE ChatGPT conversation per workspace (see Conversation management).
+   Never silently start a new chat.
 
 ## Locations
 
@@ -81,15 +91,42 @@ Ready.
 If a login wall appears (ChatGPT, Cloudflare): stop, tell the user the ONE thing
 to do ("请登录 ChatGPT，完成后告诉我'好了'"), then continue.
 
+## Conversation management (one chat per workspace)
+
+The workspace has ONE long-lived C2C conversation in ChatGPT. Do not open a new
+chat per task or per Codex session.
+
+- **Find it**: `c2c session -w <ws> --json` → `{ session: { url, taskId, ... } }`.
+  If a session exists, navigate the built-in browser to that URL and continue there.
+- **Save it**: right after creating a new C2C chat (boot prompt sent), read the
+  conversation URL from the built-in browser address bar (visible UI state only)
+  and run `c2c session set -w <ws> --url <url> --title "C2C <workspace name>"`.
+- **Update it**: after each EXECUTED/DONE, run
+  `c2c session set -w <ws> --task <id> --iteration <n> --state <STATE>`.
+- **Switch it** ONLY when (a) the user explicitly asks for a new chat, or
+  (b) the current chat has become so long it visibly lags. When switching:
+  1. Create the new chat and send the boot prompt.
+  2. Immediately send a HANDOFF message (template in `docs/protocol.md`) —
+     a short brief of: original goal, iterations so far, what is already DONE,
+     current state, known issues, and the next expected step. The new chat must
+     be able to continue the task without re-asking anything; it re-reads code
+     via MCP, so never paste files into the handoff.
+  3. `c2c session set` with the new URL (this overwrites the old one).
+- If the saved chat 404s or was deleted, treat it as a switch: new chat + boot
+  prompt + HANDOFF reconstructed from `c2c session get` and recent
+  `execution_summary` records.
+
 ## Workflow: coding task（"使用 Codex with ChatGPT 完成 XXX"）
 
 Protocol states: INIT → PLAN → EXECUTING → EXECUTED → REVIEW → (PLAN | DONE | BLOCKED).
-All control messages start with `[C2C]`. Keep them under 1 KB. Docs: `docs/protocol.md`.
+All control messages start with `[C2C]`. Keep Codex→ChatGPT messages under 1 KB.
+ChatGPT's replies are expected to be substantive (see step 3). Docs: `docs/protocol.md`.
 
 0. Ensure the bridge is healthy: `c2c doctor -w <workspace> --json` (auto-repairs).
    Generate task id: `c2c_` + 4 random hex chars.
-1. Open (or reuse) the C2C conversation in ChatGPT. On a NEW conversation first send
-   the boot prompt from `docs/protocol.md` §Boot Prompt.
+1. Open the saved C2C conversation (`c2c session --json`); only create a new chat
+   if none is saved. On a NEW conversation first send the boot prompt from
+   `docs/protocol.md` §Boot Prompt, then save the session URL.
 2. Send INIT with the user's goal:
 
 ```
@@ -107,6 +144,10 @@ Produce a C2C PLAN message.
 ```
 
 3. Wait for ChatGPT's `STATE: PLAN` reply. Read GOAL/ACTIONS/TESTS/SUCCESS_CRITERIA.
+   A good PLAN also carries RATIONALE and concrete natural-language edit
+   suggestions (which file, what to change, why). If the reply is a bare
+   one-liner with no rationale or file-level guidance, ask once:
+   "Please expand the plan with rationale and concrete per-file suggestions."
 4. Execute the plan yourself with your own harness (your tools, your judgment;
    ChatGPT does not micro-manage tool calls).
 5. Record the execution so ChatGPT can read it via MCP:
@@ -151,8 +192,9 @@ Please independently inspect the workspace and current git diff through MCP.
 2. If the tunnel URL changed (quick tunnels change on restart), update the
    connector's Server URL in ChatGPT settings via Computer Use, then re-pair:
    `c2c pair --json` → enter the new pairing code on the authorization page.
-3. If the ChatGPT conversation was lost, start a new one: boot prompt → task summary
-   → current state. No file re-uploading is ever needed (the workspace lives in MCP).
+3. If the ChatGPT conversation was lost, follow Conversation management → Switch:
+   new chat, boot prompt, HANDOFF message, `c2c session set` with the new URL.
+   No file re-uploading is ever needed (the workspace lives in MCP).
 
 ## Recovery map
 
