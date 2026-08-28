@@ -42,6 +42,9 @@ Agent（Codex），然后去倒杯咖啡：
    Tunnel、端口这些词，不要向我解释；出了问题先自己修。
 ```
 
+**更新**：Skill 每天自动检查一次 GitHub，有新版本会自动更新并继续任务，
+无需任何操作；也可以随时对 Codex 说"更新 Codex with ChatGPT"。
+
 ## 安装 → 配置 → 使用（手动版）
 
 1. 安装 Codex Skill：把 `skill/` 复制到 `~/.codex/skills/codex-with-chatgpt/`。

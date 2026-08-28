@@ -50,6 +50,31 @@ whatever data it needs by itself.
   `corepack pnpm install && corepack pnpm build` inside it.
 - Always pass `-w <workspace root>` (the project the user is working on, NOT the c2c repo).
 
+## Daily update check
+
+At the START of every workflow below (before anything else), run:
+`c2c update-check --json`. It contacts GitHub at most once per local day; on other
+runs of the same day it returns instantly from cache — so this never slows tasks down.
+
+- `{ "updateAvailable": false }` → continue silently. Never mention the check.
+- `{ "updateAvailable": true }` → tell the user one line:
+  "检测到 Codex with ChatGPT 有新版本，我先更新一下（约 1 分钟），随后继续你的任务。"
+  Then run the update workflow below, and CONTINUE the original task afterwards.
+
+## Workflow: update（"更新 Codex with ChatGPT"，or triggered by the daily check）
+
+Inside the checkout directory (see Locations):
+
+1. `git pull --ff-only` (if it fails due to local edits: `git stash && git pull --ff-only`).
+2. `corepack pnpm install && corepack pnpm build`.
+3. Re-install the Skill: copy `skill/SKILL.md` to
+   `~/.codex/skills/codex-with-chatgpt/SKILL.md`, then fix the "checkout lives at:"
+   line in the copy to the actual checkout path.
+4. `c2c restart -w <workspace>` so the bridge runs the new code, then
+   `c2c update-check --force --json` to refresh the cache (should now report up to date).
+5. Tell the user "✓ 已更新到最新版本" — then resume whatever task triggered this.
+   (The updated SKILL.md takes effect from the next Codex session; that's expected.)
+
 ## Workflow: first-time setup（"使用 Codex with ChatGPT 完成首次配置"）
 
 1. Detect prerequisites yourself: `node --version` (>= 20), and check `cloudflared`.

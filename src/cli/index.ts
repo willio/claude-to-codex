@@ -1,6 +1,8 @@
 import { Command } from "commander";
 import fs from "node:fs";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { startBridge } from "../bridge/server.js";
 import { findLiveBridge, probeBridge, readRuntimeState, type RuntimeState } from "../bridge/runtime.js";
 import { adminFetch, ensureBridge, stopBridge } from "../process/daemon.js";
@@ -419,6 +421,67 @@ program
       say(`类型：${data.projectType}  语言：${data.languages.join(", ") || "-"}`);
       say(`路径：${data.root}`);
     }
+  });
+
+// ---------------------------------------------------------------- update-check (once per local day)
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+
+function runGit(args: string[]): { ok: boolean; stdout: string } {
+  const result = spawnSync("git", args, {
+    cwd: repoRoot,
+    encoding: "utf8",
+    timeout: 8000,
+    env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+  });
+  return { ok: result.status === 0, stdout: (result.stdout ?? "").trim() };
+}
+
+program
+  .command("update-check")
+  .description("Check GitHub for a newer version (real check at most once per local day)")
+  .option("--force", "check even if already checked today", false)
+  .option("--json", "machine-readable output", false)
+  .action((opts: { force: boolean; json: boolean }) => {
+    const file = path.join(getStateDir(), "update-check.json");
+    const today = new Date().toLocaleDateString("en-CA"); // YYYY-MM-DD in local tz
+    let last: { date?: string; updateAvailable?: boolean } = {};
+    try {
+      last = JSON.parse(fs.readFileSync(file, "utf8")) as typeof last;
+    } catch {
+      /* first run */
+    }
+
+    const emit = (data: {
+      checked: boolean;
+      updateAvailable: boolean;
+      localCommit?: string;
+      remoteCommit?: string;
+      note?: string;
+    }): void => {
+      if (opts.json) say(JSON.stringify({ ok: true, version: VERSION, ...data }));
+      else if (data.updateAvailable) say(`发现新版本（本地 ${data.localCommit?.slice(0, 7)} → 远端 ${data.remoteCommit?.slice(0, 7)}）。`);
+      else say(data.note ?? "已是最新版本。");
+    };
+
+    if (!opts.force && last.date === today) {
+      emit({ checked: false, updateAvailable: last.updateAvailable ?? false, note: "今天已检查过更新。" });
+      return;
+    }
+
+    const local = runGit(["rev-parse", "HEAD"]);
+    const remote = runGit(["ls-remote", "origin", "HEAD"]);
+    if (!local.ok || !remote.ok || !remote.stdout) {
+      // Offline or not a git checkout: skip quietly and retry tomorrow-ish (do not
+      // record the date so a transient failure does not suppress the daily check).
+      emit({ checked: false, updateAvailable: false, note: "无法检查更新（离线或非 git 安装），已跳过。" });
+      return;
+    }
+    const remoteCommit = remote.stdout.split(/\s/)[0];
+    const updateAvailable = remoteCommit !== local.stdout;
+    fs.mkdirSync(getStateDir(), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify({ date: today, updateAvailable, remoteCommit }), { mode: 0o600 });
+    emit({ checked: true, updateAvailable, localCommit: local.stdout, remoteCommit });
   });
 
 // ---------------------------------------------------------------- session (ChatGPT conversation memory)

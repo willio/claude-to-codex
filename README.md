@@ -82,6 +82,11 @@ I am a non-technical user — do everything yourself:
 ```
 
 
+**Updates · 更新** — The Skill checks GitHub once a day and updates itself when a
+new version is released; no action needed. You can also say "更新 Codex with ChatGPT"
+anytime. / Skill 每天自动检查一次 GitHub，有新版本会自动更新，无需任何操作；
+也可以随时对 Codex 说"更新 Codex with ChatGPT"。
+
 ---
 
 *The sections below are in English. 以下详细内容为英文，中文完整版见
