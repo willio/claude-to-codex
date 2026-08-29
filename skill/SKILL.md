@@ -27,8 +27,9 @@ whatever data it needs by itself.
    Never touch OAuth tokens, cookies, or session storage.
 4. If something fails, run `c2c doctor` and repair silently. Only involve the user
    for logins, CAPTCHA, 2FA, or explicit consent screens — and then give them ONE action.
-5. ALWAYS use the built-in browser for every browser step (ChatGPT, authorization
-   page, verification). NEVER launch or control a third-party/external browser
+5. ALWAYS use the built-in in-app browser (iab) for every ChatGPT step.
+   Follow **In-app browser (ChatGPT)** below. NEVER Computer Use (no
+   screenshot-click). NEVER launch or control a third-party/external browser
    (Chrome, Safari, Edge…), and never use `open <url>` to hand off to one.
    - The ONLY exception: the user explicitly says the Cloudflare login must use
      their own browser session — that single Cloudflare login step may go through
@@ -46,11 +47,49 @@ whatever data it needs by itself.
    settings directory. Run `c2c sandbox-allow --json` (idempotent). If it fails
    with EPERM / Operation not permitted, request elevated permissions and retry
    ONCE. After `{ "alreadyAllowed": true }` or `{ "added": true }`, stay silent.
-8. ChatGPT settings: only these URLs, for first-time setup AND later repair.
-   Never start from chatgpt.com and click through menus.
-   - 开发人员模式: https://chatgpt.com/#settings/Security
-   - 插件总管: https://chatgpt.com/plugins
-   - 加插件: https://chatgpt.com/plugins#settings/Connectors?create-connector=true&redirectAfter=%2Fplugins
+8. ChatGPT pages: only the URLs in **In-app browser (ChatGPT)**. Never start
+   from chatgpt.com and click through menus.
+
+## In-app browser (ChatGPT)
+
+Official skill: `control-in-app-browser`. These C2C rules override defaults
+that close the tab, hide the window, or stall on the settings page.
+
+1. **Surface.** Once per Codex session: `setupBrowserRuntime()`, then
+   `const iab = await agent.browsers.get("iab")`. Reuse `iab`. Do not re-read
+   `documentation()` if it is already bound. Never `getDefault()`, `getForUrl()`,
+   or Computer Use.
+
+2. **One tab.** Create the ChatGPT tab once (`tabs.new()`). After that, only
+   `tab.goto(...)` to switch URLs. If the tab still exists, claim it — never
+   open a second ChatGPT tab. Do not `goto` the URL you are already on.
+
+3. **Foreground + keep (standby).** Right after opening or claiming the tab:
+   - `await (await iab.capabilities.get("visibility")).set(true)` — first-time
+     setup and ChatGPT chatting stay in front of the user so they can watch.
+   - `await tab.markHandoff()` immediately, then again at the start and end of
+     every turn. After setup succeeds or the C2C chat is open, also
+     `await tab.markDeliverable()`.
+   Never close this tab. Finished, waiting for the user, or timed out: leave it
+   marked (standby). Do not let default turn cleanup close it.
+
+4. **URLs only** (same tab, `goto` — never hunt menus):
+   - 开发人员模式: `https://chatgpt.com/#settings/Security`
+   - 插件总管: `https://chatgpt.com/plugins`
+   - 加插件: `https://chatgpt.com/plugins#settings/Connectors?create-connector=true&redirectAfter=%2Fplugins`
+   - 新对话 (only if no saved session): `https://chatgpt.com/`
+   - Saved C2C chat: the URL from `c2c session`
+
+5. **Do not wait for 8 tools** on the settings page. "Connected" / authorize
+   success / pairing accepted is enough. Confirm tools in the conversation with
+   `workspace_info`.
+
+6. **Batch.** Fill a known form in one Playwright / `js` script when you can.
+   After an action, one cheap DOM check. Do not screenshot-poll.
+
+7. **One conversation.** The first ChatGPT chat is the C2C conversation. Send
+   the boot prompt and the workspace_info check there. Save that URL. Do not
+   open a throwaway verify chat and later another C2C chat.
 
 ## Locations
 
@@ -107,12 +146,12 @@ Inside the checkout directory (see Locations):
    `connectorName` is this workspace's plugin title (legacy installs stay
    `Codex with ChatGPT`; additional workspaces get `Codex with ChatGPT · <name>`).
    Pairing codes expire in ~5 minutes: run `c2c pair --json` for a fresh one if you're slow.
-4. Open ChatGPT in the BUILT-IN browser. NEVER start from chatgpt.com and click
-   around. For setup AND later repairs, only these URLs:
+4. Open ChatGPT on the ONE iab tab (see **In-app browser**). Foreground +
+   markHandoff immediately. Same tab, `goto` only:
    - 开发人员模式: `https://chatgpt.com/#settings/Security`
      Enable 开发人员模式 ("Developer mode") if it is off.
-   - 插件总管（管理已有连接）: `https://chatgpt.com/plugins`
-   - 加插件 / 连接器: `https://chatgpt.com/plugins#settings/Connectors?create-connector=true&redirectAfter=%2Fplugins`
+   - 已有该 `connectorName`: `https://chatgpt.com/plugins` and edit its Server URL.
+   - 还没有: `https://chatgpt.com/plugins#settings/Connectors?create-connector=true&redirectAfter=%2Fplugins`
      Operate ONLY on `connectorName` from step 3:
       - If that exact name exists: edit its Server URL (do not create another).
       - If it does not exist: create one with that exact name.
@@ -120,10 +159,15 @@ Inside the checkout directory (see Locations):
       - Description: `Securely connect ChatGPT to the current Codex workspace for planning and review.`
       - Server URL: the `mcpUrl` from step 3
       - Authentication: OAuth
-     Then Connect / Authorize, type the pairing code, wait for the 8 read-only tools.
-5. Verify: open a new ChatGPT chat, send:
+     Fill the known form in one script when you can. Then Connect / Authorize
+     and type the pairing code. As soon as it shows Connected / authorized /
+     pairing accepted, continue — do NOT wait for 8 tools on this page.
+5. Same tab: `goto` `https://chatgpt.com/` (this IS the C2C conversation, not a
+   throwaway). Send the boot prompt from `docs/protocol.md` §Boot Prompt, then
+   (same chat) send:
    `Use the "<connectorName>" connector: call workspace_info and read hello-style top-level file. Reply with the workspace name.`
-   Confirm the reply matches `workspaceName`.
+   Confirm the reply matches `workspaceName`. Save the chat URL with
+   `c2c session set` (see Conversation management). markDeliverable.
 6. Report to the user exactly in this shape (no internals):
 
 ```
@@ -147,15 +191,16 @@ The workspace has ONE long-lived C2C conversation in ChatGPT. Do not open a new
 chat per task or per Codex session.
 
 - **Find it**: `c2c session -w <ws> --json` → `{ session: { url, taskId, ... } }`.
-  If a session exists, navigate the built-in browser to that URL and continue there.
+  If a session exists, `goto` that URL on the same iab tab (foreground +
+  markHandoff) and continue there.
 - **Save it**: right after creating a new C2C chat (boot prompt sent), read the
-  conversation URL from the built-in browser address bar (visible UI state only)
+  conversation URL from the iab address bar (visible UI state only)
   and run `c2c session set -w <ws> --url <url> --title "C2C <workspace name>"`.
 - **Update it**: after each EXECUTED/DONE, run
   `c2c session set -w <ws> --task <id> --iteration <n> --state <STATE>`.
 - **Switch it** ONLY when (a) the user explicitly asks for a new chat, or
   (b) the current chat has become so long it visibly lags. When switching:
-  1. Create the new chat and send the boot prompt.
+  1. Same iab tab: `goto` `https://chatgpt.com/`, send the boot prompt.
   2. Immediately send a HANDOFF message (template in `docs/protocol.md`) —
      a short brief of: original goal, iterations so far, what is already DONE,
      current state, known issues, and the next expected step. The new chat must
@@ -176,9 +221,12 @@ ChatGPT's replies are expected to be substantive (see step 3). Docs: `docs/proto
    If `chatgptRepair.needed` is true, tell the user `chatgptRepair.userMessage`
    (one paragraph, no internals), then run **Workflow: reconnect after address
    reclaim** below before continuing. Generate task id: `c2c_` + 4 random hex chars.
-1. Open the saved C2C conversation (`c2c session --json`); only create a new chat
-   if none is saved. On a NEW conversation first send the boot prompt from
-   `docs/protocol.md` §Boot Prompt, then save the session URL.
+1. Open the saved C2C conversation on the same iab tab (`c2c session --json`);
+   only `goto` `https://chatgpt.com/` if none is saved. Foreground + markHandoff.
+   On a NEW conversation first send the boot prompt from
+   `docs/protocol.md` §Boot Prompt, then save the session URL. Do not use the
+   browser to re-read code MCP already provides. Prefer a DOM check for
+   `STATE: PLAN` over screenshot-polling.
 2. Send INIT with the user's goal:
 
 ```
@@ -235,7 +283,9 @@ Please independently inspect the workspace and current git diff through MCP.
 ## Workflow: disconnect（"断开 ChatGPT"）
 
 1. `c2c unpair -w <workspace>` (revokes all tokens immediately).
-2. Optionally remove the connector in ChatGPT settings via Computer Use.
+2. Optionally remove the connector on the same iab tab via
+   `https://chatgpt.com/plugins` (foreground + markHandoff). Only touch
+   this workspace's `connectorName`.
 3. Tell the user: "已断开 ChatGPT 对该项目的访问。"
 
 ## Workflow: reconnect after address reclaim（全关掉以后地址失效）
@@ -248,7 +298,8 @@ the previous public address is gone. Doctor already started a new one.
 
 1. Tell the user exactly `chatgptRepair.userMessage`. Then you repair. Do not
    ask them to click around ChatGPT unless a login wall appears.
-2. Built-in browser only. Same URLs as first-time setup — never hunt menus:
+2. Same one iab tab as setup (foreground + markHandoff). `goto` only — never
+   hunt menus:
    - 开发人员模式: `https://chatgpt.com/#settings/Security`
    - 插件总管（改已有连接用这个）: `https://chatgpt.com/plugins`
    - 加插件（当前项目还没有自己的连接才用）: `https://chatgpt.com/plugins#settings/Connectors?create-connector=true&redirectAfter=%2Fplugins`
@@ -256,8 +307,9 @@ the previous public address is gone. Doctor already started a new one.
    if it exists, edit its Server URL to `chatgptRepair.mcpUrl`; if it is gone,
    create that exact name. Never touch another workspace's connector.
    Then Connect / Authorize and type `chatgptRepair.pairingCode`
-   (or `c2c pair --json` if it expired).
-4. Resume the original ChatGPT conversation (`c2c session`). Do not start a new
+   (or `c2c pair --json` if it expired). Continue as soon as it is Connected —
+   do not wait for 8 tools on the settings page.
+4. Same tab: `goto` the saved conversation (`c2c session`). Do not start a new
    audit/task chat just because the address changed.
 5. If the ChatGPT conversation was lost, follow Conversation management → Switch:
    new chat, boot prompt, HANDOFF. No file re-uploading (the workspace lives in MCP).
