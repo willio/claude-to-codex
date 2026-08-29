@@ -15,13 +15,22 @@ can (restarts the bridge, restarts the tunnel) without asking.
 `c2c start` (or let doctor do it). Bridge logs:
 `c2c logs`, or verbose: `c2c logs --verbose`.
 
-### Tunnel URL unreachable / ChatGPT says the connector is broken
-Quick Tunnel URLs change whenever the tunnel restarts.
+### Everything was quit and ChatGPT can no longer connect
+Quitting Codex / the terminal stops the public address. The next `c2c doctor`
+starts a new address and sets `chatgptRepair.needed`. The Skill should tell the
+user that the old address expired, then update the existing
+「Codex with ChatGPT」connector (never create a second one) and re-pair.
 
-1. `c2c doctor` — restarts the tunnel and prints the current URL.
-2. Update the connector's Server URL in ChatGPT settings (the Skill does this
-   automatically via Computer Use).
-3. Re-authorize with a fresh pairing code: `c2c pair`.
+Fixed ChatGPT pages for first-time setup and later repair (do not hunt the UI):
+
+- Developer mode: https://chatgpt.com/#settings/Security
+- Plugins hub (manage existing connectors): https://chatgpt.com/plugins
+- Add a connector:
+  https://chatgpt.com/plugins#settings/Connectors?create-connector=true&redirectAfter=%2Fplugins
+
+### Tunnel URL unreachable / ChatGPT says the connector is broken
+Same as above: `c2c doctor`, then update the existing connector if
+`chatgptRepair.needed`. Fresh pairing code: `c2c pair`.
 
 ### "配对码无效/过期"
 Pairing codes are one-time and expire after ~5 minutes:
