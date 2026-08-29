@@ -91,6 +91,18 @@ that close the tab, hide the window, or stall on the settings page.
    the boot prompt and the workspace_info check there. Save that URL. Do not
    open a throwaway verify chat and later another C2C chat.
 
+8. **Wait for a ChatGPT reply (do not hold one long browser wait).** After you
+   send INIT, EXECUTED, boot, or the workspace_info check: `markHandoff`, keep
+   the tab foreground, and stay in this same task. Do not `waitFor` 5 minutes
+   and do not screenshot-poll. Every 20–30 seconds, one cheap DOM check:
+   - still generating → wait again (do not type, do not resend);
+   - `STATE: PLAN` / `DONE` / `BLOCKED` / the verify workspace name → read it
+     and continue the existing protocol;
+   - visible error → repair; do not start a new chat.
+   A browser/js timeout is not failure. Claim the same tab, read the page, keep
+   standby. If ChatGPT is still thinking, keep polling. Never open a second
+   tab and never resend INIT/EXECUTED just because a wait timed out.
+
 ## Locations
 
 - The codex-with-chatgpt checkout lives at: `/Users/xiaoduo_/Codex_With_ChatGPT`
@@ -166,8 +178,9 @@ Inside the checkout directory (see Locations):
    throwaway). Send the boot prompt from `docs/protocol.md` §Boot Prompt, then
    (same chat) send:
    `Use the "<connectorName>" connector: call workspace_info and read hello-style top-level file. Reply with the workspace name.`
-   Confirm the reply matches `workspaceName`. Save the chat URL with
-   `c2c session set` (see Conversation management). markDeliverable.
+   Confirm the reply matches `workspaceName` (wait per **In-app browser** §8).
+   Save the chat URL with `c2c session set` (see Conversation management).
+   markDeliverable.
 6. Report to the user exactly in this shape (no internals):
 
 ```
@@ -225,8 +238,8 @@ ChatGPT's replies are expected to be substantive (see step 3). Docs: `docs/proto
    only `goto` `https://chatgpt.com/` if none is saved. Foreground + markHandoff.
    On a NEW conversation first send the boot prompt from
    `docs/protocol.md` §Boot Prompt, then save the session URL. Do not use the
-   browser to re-read code MCP already provides. Prefer a DOM check for
-   `STATE: PLAN` over screenshot-polling.
+   browser to re-read code MCP already provides. After sending a control
+   message, wait per **In-app browser** §8.
 2. Send INIT with the user's goal:
 
 ```
@@ -243,7 +256,9 @@ Inspect the connected workspace through the Codex with ChatGPT MCP connector.
 Produce a C2C PLAN message.
 ```
 
-3. Wait for ChatGPT's `STATE: PLAN` reply. Read GOAL/ACTIONS/TESTS/SUCCESS_CRITERIA.
+3. Wait for ChatGPT's `STATE: PLAN` reply (**In-app browser** §8 — short DOM
+   checks, same tab; do not treat a 5-minute browser timeout as failure).
+   Read GOAL/ACTIONS/TESTS/SUCCESS_CRITERIA.
    A good PLAN also carries RATIONALE and concrete natural-language edit
    suggestions (which file, what to change, why). If the reply is a bare
    one-liner with no rationale or file-level guidance, ask once:
