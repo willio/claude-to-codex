@@ -49,6 +49,16 @@ whatever data it needs by itself.
    ONCE. After `{ "alreadyAllowed": true }` or `{ "added": true }`, stay silent.
 8. ChatGPT pages: only the URLs in **In-app browser (ChatGPT)**. Never start
    from chatgpt.com and click through menus.
+9. **Doctor gate.** After `c2c doctor --json`, do not `goto` ChatGPT and do not
+   send `[C2C]` until local is green — except the reconnect settings pages when
+   `chatgptRepair.needed` is true. Not green:
+   - `report.bridge.ok` is not true
+   - `report.mcp.ok` is not true (unauthenticated local `/mcp` must be 401)
+   - sandbox / state-dir write failed (EPERM)
+   - this workspace used to have a public URL and the tunnel is down
+   - `chatgptRepair.needed` is true (fix the connector first, then doctor again)
+   A ChatGPT-side 401 after a sent message is different: repair then, do not
+   treat it as permission to skip this gate next time.
 
 ## In-app browser (ChatGPT)
 
@@ -230,10 +240,12 @@ Protocol states: INIT → PLAN → EXECUTING → EXECUTED → REVIEW → (PLAN |
 All control messages start with `[C2C]`. Keep Codex→ChatGPT messages under 1 KB.
 ChatGPT's replies are expected to be substantive (see step 3). Docs: `docs/protocol.md`.
 
-0. Ensure the bridge is healthy: `c2c doctor -w <workspace> --json` (auto-repairs).
-   If `chatgptRepair.needed` is true, tell the user `chatgptRepair.userMessage`
-   (one paragraph, no internals), then run **Workflow: reconnect after address
-   reclaim** below before continuing. Generate task id: `c2c_` + 4 random hex chars.
+0. `c2c doctor -w <workspace> --json` (auto-repairs). **Doctor gate:** if local
+   is not green, do not open ChatGPT and do not send INIT. If
+   `chatgptRepair.needed` is true, tell the user `chatgptRepair.userMessage`
+   (one paragraph, no internals), run **Workflow: reconnect after address
+   reclaim**, then doctor again and only continue when the gate is green.
+   Generate task id: `c2c_` + 4 random hex chars.
 1. Open the saved C2C conversation on the same iab tab (`c2c session --json`);
    only `goto` `https://chatgpt.com/` if none is saved. Foreground + markHandoff.
    On a NEW conversation first send the boot prompt from
@@ -312,9 +324,11 @@ the previous public address is gone. Doctor already started a new one.
 `{ "chatgptRepair": { "needed": true, "connectorAction": "update", "connectorName": "...", "userMessage": "...", "mcpUrl": "...", "pairingCode": "...", "pages": { ... } } }`
 
 1. Tell the user exactly `chatgptRepair.userMessage`. Then you repair. Do not
-   ask them to click around ChatGPT unless a login wall appears.
-2. Same one iab tab as setup (foreground + markHandoff). `goto` only — never
-   hunt menus:
+   ask them to click around ChatGPT unless a login wall appears. Do not open
+   the C2C chat and do not send `[C2C]` until this repair finishes and a
+   follow-up doctor is green.
+2. Same one iab tab as setup (foreground + markHandoff). Settings URLs only
+   until Connected — never hunt menus:
    - 开发人员模式: `https://chatgpt.com/#settings/Security`
    - 插件总管（改已有连接用这个）: `https://chatgpt.com/plugins`
    - 加插件（当前项目还没有自己的连接才用）: `https://chatgpt.com/plugins#settings/Connectors?create-connector=true&redirectAfter=%2Fplugins`
@@ -324,15 +338,18 @@ the previous public address is gone. Doctor already started a new one.
    Then Connect / Authorize and type `chatgptRepair.pairingCode`
    (or `c2c pair --json` if it expired). Continue as soon as it is Connected —
    do not wait for 8 tools on the settings page.
-4. Same tab: `goto` the saved conversation (`c2c session`). Do not start a new
+4. `c2c doctor --json` again. Same tab: `goto` the saved conversation
+   (`c2c session`) only after the Doctor gate is green. Do not start a new
    audit/task chat just because the address changed.
 5. If the ChatGPT conversation was lost, follow Conversation management → Switch:
    new chat, boot prompt, HANDOFF. No file re-uploading (the workspace lives in MCP).
 
 ## Workflow: repair（anything looks broken）
 
-1. `c2c doctor -w <workspace> --json`.
-2. If `chatgptRepair.needed`, follow **reconnect after address reclaim**.
+1. `c2c doctor -w <workspace> --json`. Doctor gate: do not open ChatGPT / send
+   `[C2C]` until local is green, except reconnect settings pages.
+2. If `chatgptRepair.needed`, follow **reconnect after address reclaim**, then
+   doctor again.
 3. Otherwise apply the recovery map. Only involve the user for login / 2FA /
    CAPTCHA — one action.
 
