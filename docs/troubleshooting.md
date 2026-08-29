@@ -18,8 +18,9 @@ can (restarts the bridge, restarts the tunnel) without asking.
 ### Everything was quit and ChatGPT can no longer connect
 Quitting Codex / the terminal stops the public address. The next `c2c doctor`
 starts a new address and sets `chatgptRepair.needed`. The Skill should tell the
-user that the old address expired, then update the existing
-「Codex with ChatGPT」connector (never create a second one) and re-pair.
+user that the old address expired, then update THIS workspace's connector
+(`chatgptRepair.connectorName`) and re-pair. Other workspaces keep their own
+connectors so two projects can stay connected at once.
 
 Fixed ChatGPT pages for first-time setup and later repair (do not hunt the UI):
 

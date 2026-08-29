@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { connectorAction, mcpUrlFromPublic, normalizePublicUrl } from "../src/config/endpoint.js";
+import {
+  connectorAction,
+  connectorNameFor,
+  DEFAULT_CONNECTOR_NAME,
+  mcpUrlFromPublic,
+  normalizePublicUrl,
+} from "../src/config/endpoint.js";
 
 describe("connectorAction", () => {
   it("creates on the first successful URL", () => {
@@ -16,6 +22,39 @@ describe("connectorAction", () => {
 
   it("does nothing without a next URL", () => {
     expect(connectorAction("https://a.trycloudflare.com/mcp", null)).toBe("none");
+  });
+});
+
+describe("connectorNameFor", () => {
+  it("keeps a stored name for the same workspace", () => {
+    expect(
+      connectorNameFor({
+        workspaceName: "EchoMind",
+        workspaceId: "abc123abc123",
+        previousName: "Codex with ChatGPT",
+        hadEndpointBefore: true,
+      })
+    ).toBe(DEFAULT_CONNECTOR_NAME);
+  });
+
+  it("keeps the legacy title when this workspace was used before the name field existed", () => {
+    expect(
+      connectorNameFor({
+        workspaceName: "EchoMind",
+        workspaceId: "abc123abc123",
+        hadEndpointBefore: true,
+      })
+    ).toBe(DEFAULT_CONNECTOR_NAME);
+  });
+
+  it("gives a new workspace its own connector title", () => {
+    expect(
+      connectorNameFor({
+        workspaceName: "Landing",
+        workspaceId: "def456def456",
+        hadEndpointBefore: false,
+      })
+    ).toBe("Codex with ChatGPT · Landing");
   });
 });
 

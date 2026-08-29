@@ -6,11 +6,14 @@ export const CHATGPT_PLUGINS_URL = "https://chatgpt.com/plugins";
 export const CHATGPT_CREATE_CONNECTOR_URL =
   "https://chatgpt.com/plugins#settings/Connectors?create-connector=true&redirectAfter=%2Fplugins";
 
+export const DEFAULT_CONNECTOR_NAME = "Codex with ChatGPT";
+
 export interface LastEndpoint {
   workspaceId: string;
   port: number;
   publicUrl: string | null;
   mcpUrl: string | null;
+  connectorName?: string;
   savedAt: string;
 }
 
@@ -38,7 +41,7 @@ export function mcpUrlFromPublic(publicUrl: string | null | undefined): string |
   return `${base}/mcp`;
 }
 
-/** What the Skill should do to the ChatGPT connector. Never create a second one. */
+/** What the Skill should do to THIS workspace's ChatGPT connector. */
 export function connectorAction(
   previousMcpUrl: string | null | undefined,
   nextMcpUrl: string | null | undefined
@@ -48,5 +51,27 @@ export function connectorAction(
   return normalizePublicUrl(previousMcpUrl) === normalizePublicUrl(nextMcpUrl) ? "none" : "update";
 }
 
-export const ADDRESS_RECLAIMED_USER_MESSAGE =
-  "上次退出后，安全连接地址已经失效。我会在 ChatGPT 里更新现有的「Codex with ChatGPT」连接并重新配对，不用新建。请稍等。";
+export function sanitizeConnectorLabel(name: string, workspaceId: string): string {
+  const cleaned = name.replace(/[^\p{L}\p{N}._\- ]+/gu, "").replace(/\s+/g, " ").trim();
+  return cleaned.slice(0, 40) || workspaceId.slice(0, 6);
+}
+
+/**
+ * Same workspace keeps one connector title forever.
+ * A workspace already recorded without a title stays on the original
+ * "Codex with ChatGPT" name. A new workspace gets a distinct title.
+ */
+export function connectorNameFor(opts: {
+  workspaceName: string;
+  workspaceId: string;
+  previousName?: string | null;
+  hadEndpointBefore: boolean;
+}): string {
+  if (opts.previousName?.trim()) return opts.previousName.trim();
+  if (opts.hadEndpointBefore) return DEFAULT_CONNECTOR_NAME;
+  return `${DEFAULT_CONNECTOR_NAME} · ${sanitizeConnectorLabel(opts.workspaceName, opts.workspaceId)}`;
+}
+
+export function reclaimUserMessage(connectorName: string): string {
+  return `当前项目的安全连接地址已经失效。我会只更新「${connectorName}」，其它项目的连接不动。请稍等。`;
+}
