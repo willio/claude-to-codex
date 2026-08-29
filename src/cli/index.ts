@@ -12,6 +12,7 @@ import { appendExecutionRecord } from "../execution/records.js";
 import { detectTunnelBinaries } from "../tunnel/detect.js";
 import { Logger } from "../logger/index.js";
 import { getStateDir } from "../config/paths.js";
+import { ensureSandboxAllowlist, getCodexConfigPath, isStateDirAllowlisted } from "../config/sandbox-allow.js";
 import { PRODUCT_NAME, VERSION } from "../version.js";
 
 const program = new Command();
@@ -24,6 +25,17 @@ const cross = (msg: string): void => say(`✗ ${msg}`);
 
 function resolveWorkspace(option?: string): string {
   return path.resolve(option ?? process.cwd());
+}
+
+function trySandboxAllow():
+  | { ok: true; added: boolean; alreadyAllowed: boolean; stateDir: string; configPath: string }
+  | { ok: false; added: false; alreadyAllowed: false; error: string } {
+  try {
+    const result = ensureSandboxAllowlist();
+    return { ok: true, ...result };
+  } catch (error) {
+    return { ok: false, added: false, alreadyAllowed: false, error: (error as Error).message };
+  }
 }
 
 interface TunnelStartResponse {
@@ -141,6 +153,7 @@ program
         say("正在连接 ChatGPT…");
         say("");
       }
+      const sandbox = trySandboxAllow();
       const { runtime, info, mcpUrl } = await ensureBridgeAndTunnel(root, { tunnel: opts.tunnel });
       const pairingResult = await adminFetch<PairingResponse>(runtime, "POST", "/admin/pairing");
       if (opts.json) {
@@ -153,6 +166,7 @@ program
             local: mcpUrl === null,
             pairingCode: pairingResult.code,
             pairingExpiresAt: pairingResult.expiresAt,
+            sandbox,
           })
         );
         return;
@@ -248,6 +262,26 @@ program
     const nodeMajor = parseInt(process.versions.node.split(".")[0], 10);
     report.node = { ok: nodeMajor >= 20, detail: `v${process.versions.node}` };
 
+    // Codex sandbox writable_roots (so later chats do not need elevation)
+    if (opts.fix) {
+      const sandbox = trySandboxAllow();
+      if (sandbox.ok) {
+        report.sandbox = { ok: true, detail: sandbox.alreadyAllowed ? "已在白名单" : "已写入白名单" };
+        if (sandbox.added) results.push("已将本地设置目录加入 Codex 沙箱白名单");
+      } else {
+        report.sandbox = { ok: false, detail: sandbox.error };
+      }
+    } else {
+      try {
+        const configPath = getCodexConfigPath();
+        const allowed =
+          fs.existsSync(configPath) && isStateDirAllowlisted(fs.readFileSync(configPath, "utf8"), getStateDir());
+        report.sandbox = allowed ? { ok: true, detail: "已在白名单" } : { ok: false, detail: "未在白名单" };
+      } catch (error) {
+        report.sandbox = { ok: false, detail: (error as Error).message };
+      }
+    }
+
     // Workspace
     let workspace: Workspace | null = null;
     try {
@@ -322,6 +356,7 @@ program
     say("");
     const labels: Record<string, string> = {
       node: "Node.js",
+      sandbox: "Sandbox",
       workspace: "Workspace",
       bridge: "Bridge",
       mcp: "MCP",
@@ -421,6 +456,28 @@ program
       say(`类型：${data.projectType}  语言：${data.languages.join(", ") || "-"}`);
       say(`路径：${data.root}`);
     }
+  });
+
+// ---------------------------------------------------------------- sandbox-allow (Codex writable_roots, macOS + Windows)
+
+program
+  .command("sandbox-allow")
+  .description("Add the local settings directory to the Codex sandbox allowlist")
+  .option("--json", "machine-readable output", false)
+  .action((opts: { json: boolean }) => {
+    const result = trySandboxAllow();
+    if (opts.json) {
+      say(JSON.stringify(result));
+      if (!result.ok) process.exitCode = 1;
+      return;
+    }
+    if (!result.ok) {
+      cross(`无法写入 Codex 沙箱白名单：${result.error}`);
+      process.exitCode = 1;
+      return;
+    }
+    if (result.alreadyAllowed) check("沙箱白名单已就绪，后续对话无需再提权");
+    else check("已将本地设置目录加入 Codex 沙箱白名单（后续对话无需再提权）");
   });
 
 // ---------------------------------------------------------------- update-check (once per local day)

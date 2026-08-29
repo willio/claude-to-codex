@@ -43,6 +43,17 @@ Windows: `winget install Cloudflare.cloudflared`
 Linux: see Cloudflare's package instructions.
 The Skill installs this automatically during setup.
 
+### Every new Codex chat “repairs” the connection / cannot write logs
+The C2C state directory lives outside the project (macOS:
+`~/Library/Application Support/codex-with-chatgpt`; Windows:
+`%LOCALAPPDATA%\codex-with-chatgpt`). Codex's default sandbox cannot write
+there, so each new chat looks like a health-check failure.
+
+`c2c setup`, `c2c doctor` and `c2c sandbox-allow` add that directory to
+`[sandbox_workspace_write].writable_roots` in `~/.codex/config.toml`
+(`%USERPROFILE%\.codex\config.toml` on Windows). After that, later chats
+do not need elevation.
+
 ### Port already in use
 Handled automatically: an existing healthy bridge for the same workspace is
 reused; anything else makes the bridge pick a free port. Configuration follows

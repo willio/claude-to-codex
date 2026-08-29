@@ -177,6 +177,7 @@ pnpm build          # -> dist/, exposes the `c2c` bin
 pnpm test           # vitest: 76 tests (path security, OAuth, pairing, MCP e2e)
 
 c2c setup           # bridge + tunnel + pairing code, all in one
+c2c sandbox-allow   # whitelist the settings dir in Codex (macOS + Windows)
 c2c status / doctor / pair / unpair / logs / stop
 ```
 
