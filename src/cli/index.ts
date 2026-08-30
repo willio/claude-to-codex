@@ -10,6 +10,21 @@ import { Workspace } from "../workspace/manager.js";
 import { AuthStore } from "../auth/store.js";
 import { appendExecutionRecord } from "../execution/records.js";
 import { detectTunnelBinaries } from "../tunnel/detect.js";
+import {
+  chooseQuickTunnel,
+  hasCloudflaredCert,
+  ProcessCloudflaredAccount,
+  provisionNamedTunnel,
+} from "../tunnel/named-provision.js";
+import { parseZoneInput, suggestedNamedHostname } from "../tunnel/hostname.js";
+import {
+  isNamedTunnelReady,
+  NAMED_LOGIN_PROMPT,
+  NAMED_REPAIR_MESSAGE,
+  needsTunnelChoice,
+  readTunnelState,
+  TUNNEL_CHOICE_PROMPT,
+} from "../tunnel/state.js";
 import { Logger } from "../logger/index.js";
 import { getStateDir } from "../config/paths.js";
 import { ensureSandboxAllowlist, getCodexConfigPath, isStateDirAllowlisted } from "../config/sandbox-allow.js";
@@ -20,6 +35,7 @@ import {
   connectorAction,
   connectorNameFor,
   mcpUrlFromPublic,
+  normalizePublicUrl,
   readLastEndpoint,
   reclaimUserMessage,
   writeLastEndpoint,
@@ -62,6 +78,24 @@ function persistWorkspaceEndpoint(opts: {
     connectorName,
   });
   return connectorName;
+}
+
+function tunnelChoicePayload(workspace: Workspace, zoneHint?: string): Record<string, unknown> {
+  const state = readTunnelState(workspace.id);
+  const zone = parseZoneInput(zoneHint ?? "") ?? state.zone ?? null;
+  return {
+    ok: true,
+    needsChoice: needsTunnelChoice(state),
+    preference: state.preference,
+    loggedIn: hasCloudflaredCert(),
+    namedReady: isNamedTunnelReady(state),
+    zone,
+    hostname: state.hostname ?? null,
+    suggestedHostname: zone ? suggestedNamedHostname(zone, workspace.name, workspace.id) : null,
+    userPrompt: needsTunnelChoice(state) ? TUNNEL_CHOICE_PROMPT : undefined,
+    loginPrompt: NAMED_LOGIN_PROMPT,
+    fallbackReason: state.fallbackReason,
+  };
 }
 
 function trySandboxAllow():
@@ -216,6 +250,7 @@ program
             hadEndpointBefore: Boolean(readLastEndpoint(info.workspaceId)),
           });
       const pairingResult = await adminFetch<PairingResponse>(runtime, "POST", "/admin/pairing");
+      const tunnelState = readTunnelState(info.workspaceId);
       if (opts.json) {
         say(
           JSON.stringify({
@@ -228,6 +263,11 @@ program
             pairingCode: pairingResult.code,
             pairingExpiresAt: pairingResult.expiresAt,
             sandbox,
+            tunnel: {
+              mode: isNamedTunnelReady(tunnelState) ? "named" : "quick",
+              hostname: tunnelState.hostname ?? null,
+              fallback: Boolean(tunnelState.fallbackReason),
+            },
           })
         );
         return;
@@ -395,6 +435,9 @@ program
           hadEndpointBefore: Boolean(lastEndpoint),
         })
       : "Codex with ChatGPT";
+    const tunnelState = workspace ? readTunnelState(workspace.id) : null;
+    const namedReady = tunnelState ? isNamedTunnelReady(tunnelState) : false;
+    let namedRepair: { needed: boolean; userMessage?: string } = { needed: false };
     let chatgptRepair: {
       needed: boolean;
       reason?: string;
@@ -425,7 +468,18 @@ program
 
     if (runtime) {
       let info = await adminFetch<AdminInfo>(runtime, "GET", "/admin/info");
-      const expectedPublic = Boolean(lastEndpoint?.publicUrl);
+      if (namedReady && opts.fix && info.tunnel.provider !== "cloudflare-named") {
+        await stopBridge(root);
+        await new Promise((resolve) => setTimeout(resolve, 400));
+        try {
+          runtime = (await ensureBridge(root)).runtime;
+          info = await adminFetch<AdminInfo>(runtime, "GET", "/admin/info");
+          results.push("已切换到固定域名连接");
+        } catch (error) {
+          report.tunnel = { ok: false, detail: (error as Error).message };
+        }
+      }
+      const expectedPublic = Boolean(lastEndpoint?.publicUrl) || namedReady;
       let currentUrl = info.publicUrl ?? info.tunnel.url;
       let healthy = false;
       if (currentUrl) {
@@ -445,10 +499,13 @@ program
           } else {
             const started = await adminFetch<TunnelStartResponse>(runtime, "POST", "/admin/tunnel/start", 90_000);
             if (started.url) {
+              const previousUrl = lastEndpoint?.publicUrl;
               currentUrl = started.url;
               healthy = true;
               info = await adminFetch<AdminInfo>(runtime, "GET", "/admin/info");
-              results.push("已重新建立安全连接（地址已更换）");
+              const sameAddress =
+                previousUrl && normalizePublicUrl(previousUrl) === normalizePublicUrl(started.url);
+              results.push(sameAddress ? "已重新建立安全连接" : "已重新建立安全连接（地址已更换）");
             }
           }
         } catch (error) {
@@ -490,6 +547,9 @@ program
             report.oauth = { ok: false, detail: (error as Error).message };
           }
         }
+      } else if (namedReady) {
+        report.tunnel = report.tunnel ?? { ok: false, detail: "NAMED_TUNNEL_DOWN" };
+        namedRepair = { needed: true, userMessage: NAMED_REPAIR_MESSAGE };
       } else if (expectedPublic) {
         report.tunnel = report.tunnel ?? { ok: false, detail: "安全连接未恢复" };
         chatgptRepair = {
@@ -506,6 +566,9 @@ program
       } else {
         report.tunnel = { ok: false, detail: "公网地址无法访问" };
       }
+    } else if (namedReady) {
+      report.tunnel = { ok: false, detail: "NAMED_TUNNEL_DOWN" };
+      namedRepair = { needed: true, userMessage: NAMED_REPAIR_MESSAGE };
     } else if (lastEndpoint?.publicUrl) {
       report.tunnel = { ok: false, detail: "安全连接未运行" };
       chatgptRepair = {
@@ -519,7 +582,7 @@ program
     }
 
     if (opts.json) {
-      say(JSON.stringify({ report, repairs: results, chatgptRepair }));
+      say(JSON.stringify({ report, repairs: results, chatgptRepair, namedRepair }));
       return;
     }
     say(`${PRODUCT_NAME} Doctor`);
@@ -544,14 +607,26 @@ program
     }
     for (const repair of results) say(`· ${repair}`);
     say("");
+    if (namedRepair.needed && namedRepair.userMessage) {
+      say(namedRepair.userMessage);
+      say("");
+    }
     if (chatgptRepair.needed && chatgptRepair.userMessage) {
       say(chatgptRepair.userMessage);
       if (chatgptRepair.mcpUrl) say(`新的连接地址：${chatgptRepair.mcpUrl}`);
       if (chatgptRepair.pairingCode) say(`配对码：${chatgptRepair.pairingCode}`);
       say("");
     }
-    say(allOk && !chatgptRepair.needed ? "Everything looks good." : chatgptRepair.needed ? "本地已就绪，还需要在 ChatGPT 删除并重新添加该连接。" : "仍有问题未解决，可尝试 `c2c restart --tunnel`。");
-    if (!allOk) process.exitCode = 1;
+    say(
+      allOk && !chatgptRepair.needed && !namedRepair.needed
+        ? "Everything looks good."
+        : chatgptRepair.needed
+          ? "本地已就绪，还需要在 ChatGPT 删除并重新添加该连接。"
+          : namedRepair.needed
+            ? "固定域名还没连上，需要先登录 Cloudflare。"
+            : "仍有问题未解决，可尝试 `c2c restart --tunnel`。"
+    );
+    if (!allOk || namedRepair.needed) process.exitCode = 1;
   });
 
 // ---------------------------------------------------------------- pair / unpair
@@ -827,6 +902,116 @@ program
       check("已记录执行摘要");
     }
   );
+
+const tunnelCmd = program.command("tunnel").description("Choose or inspect the public connection for this workspace");
+
+tunnelCmd
+  .command("status", { isDefault: true })
+  .description("Show whether this workspace still needs a one-time connection choice")
+  .option("-w, --workspace <path>")
+  .option("--zone <domain>", "optional domain, used to preview the stable hostname")
+  .option("--json", "machine-readable output", false)
+  .action((opts: { workspace?: string; zone?: string; json: boolean }) => {
+    try {
+      const workspace = new Workspace(resolveWorkspace(opts.workspace));
+      const payload = tunnelChoicePayload(workspace, opts.zone);
+      if (opts.json) {
+        say(JSON.stringify(payload));
+        return;
+      }
+      if (payload.needsChoice) say(TUNNEL_CHOICE_PROMPT);
+      else if (payload.namedReady) check(`固定域名：${payload.hostname}`);
+      else say("当前使用临时地址。");
+    } catch (error) {
+      handleCliError(error, opts.json);
+    }
+  });
+
+tunnelCmd
+  .command("choose")
+  .description("Remember quick vs named, and provision a named hostname when asked")
+  .requiredOption("--mode <mode>", "quick or named")
+  .option("-w, --workspace <path>")
+  .option("--zone <domain>", "Cloudflare domain for a named hostname")
+  .option("--hostname <hostname>", "override the default c2c-<project>.<zone>")
+  .option("--json", "machine-readable output", false)
+  .action(async (opts: { mode: string; workspace?: string; zone?: string; hostname?: string; json: boolean }) => {
+    const root = resolveWorkspace(opts.workspace);
+    try {
+      const workspace = new Workspace(root);
+      const mode = opts.mode.trim().toLowerCase();
+      const previous = readTunnelState(workspace.id);
+      if (mode === "quick") {
+        const state = chooseQuickTunnel(workspace.id);
+        if (await findLiveBridge(workspace.id)) {
+          if (previous.preference === "named") await stopBridge(root);
+        }
+        const payload = { ...tunnelChoicePayload(workspace), state };
+        if (opts.json) say(JSON.stringify(payload));
+        else check("已选用临时地址");
+        return;
+      }
+      if (mode !== "named") {
+        throw new Error("mode must be quick or named");
+      }
+      const zone = parseZoneInput(opts.zone ?? "");
+      if (!zone) {
+        const payload = {
+          ok: false,
+          need: "zone",
+          userMessage: "请告诉我已经加在 Cloudflare 上的域名，例如 example.com",
+          loginPrompt: NAMED_LOGIN_PROMPT,
+        };
+        if (opts.json) {
+          say(JSON.stringify(payload));
+          return;
+        }
+        say(payload.userMessage);
+        return;
+      }
+      if (!opts.json) say(NAMED_LOGIN_PROMPT);
+      const result = await provisionNamedTunnel({
+        workspaceId: workspace.id,
+        workspaceName: workspace.name,
+        zone,
+        hostname: opts.hostname,
+      });
+      if (await findLiveBridge(workspace.id)) await stopBridge(root);
+      const payload = {
+        ...tunnelChoicePayload(workspace),
+        ok: true,
+        fallback: result.fallback,
+        userMessage: result.userMessage,
+        error: result.error,
+        state: result.state,
+      };
+      if (opts.json) {
+        say(JSON.stringify(payload));
+        return;
+      }
+      if (result.fallback) say(result.userMessage ?? "");
+      else check(`固定域名已就绪：${result.state.hostname}`);
+    } catch (error) {
+      handleCliError(error, opts.json);
+    }
+  });
+
+tunnelCmd
+  .command("login")
+  .description("Open the Cloudflare login window used by a named hostname")
+  .option("--json", "machine-readable output", false)
+  .action(async (opts: { json: boolean }) => {
+    try {
+      if (!opts.json) say(NAMED_LOGIN_PROMPT);
+      const account = new ProcessCloudflaredAccount();
+      await account.login();
+      const payload = { ok: true, loggedIn: hasCloudflaredCert() };
+      if (opts.json) say(JSON.stringify(payload));
+      else check("Cloudflare 已登录");
+    } catch (error) {
+      handleCliError(error, opts.json);
+    }
+  });
 
 function handleCliError(error: unknown, json: boolean): void {
   const message = error instanceof Error ? error.message : String(error);

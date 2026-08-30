@@ -175,7 +175,14 @@ describe("workspace identity", () => {
 
   it("reads .c2c.json project name", () => {
     const named = makeTmpDir("named");
-    write(named, ".c2c.json", JSON.stringify({ name: "Remi", maxIterations: 12 }));
+    write(
+      named,
+      ".c2c.json",
+      JSON.stringify({
+        name: "Remi",
+        maxIterations: 12,
+      })
+    );
     const namedWs = new Workspace(named);
     expect(namedWs.name).toBe("Remi");
     expect(namedWs.projectConfig.maxIterations).toBe(12);

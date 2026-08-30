@@ -114,7 +114,23 @@ Codex with ChatGPT
 Ready.
 ```
 
-The only step that may need you: logging into ChatGPT (and nothing else).
+The only step that may need you: logging into ChatGPT (and, if you want a
+stable hostname, logging into Cloudflare once).
+
+### Optional stable hostname
+
+The default public address is a temporary Cloudflare URL. It changes when the
+bridge restarts, and Codex repairs ChatGPT by deleting that workspace's
+connector and adding it again.
+
+If you have a Cloudflare account and a domain already on Cloudflare, first-time
+setup (and the next coding session, once) will ask whether you want a stable
+hostname such as `c2c-<project>.your-domain.com`. That path opens a browser so
+you can authorize Cloudflare. After that, the ChatGPT connector keeps working
+across restarts. If you skip it, or login fails, Codex stays on the temporary
+address — same features, just a slower repair.
+
+Credentials stay in the OS app state directory, not in the project.
 
 ## How it works
 
@@ -196,7 +212,7 @@ src/
   auth/       OAuth 2.1 (PKCE, DCR, refresh rotation, revocation)
   pairing/    one-time pairing codes (CSPRNG, TTL, rate limits)
   workspace/  path containment, sensitive-file policy, search, git
-  tunnel/     TunnelProvider abstraction + Cloudflare Quick Tunnel
+  tunnel/     TunnelProvider abstraction + Cloudflare Quick/Named Tunnel
   execution/  execution records for the review loop
   process/    daemon lifecycle
   cli/        the c2c CLI

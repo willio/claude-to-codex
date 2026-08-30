@@ -57,6 +57,8 @@ whatever data it needs by itself.
    - sandbox / state-dir write failed (EPERM)
    - this workspace used to have a public URL and the tunnel is down
    - `chatgptRepair.needed` is true (fix the connector first, then doctor again)
+   - `namedRepair.needed` is true (user must login to Cloudflare, then doctor again.
+     Do not Delete the ChatGPT connector — the address did not change)
    A ChatGPT-side 401 after a sent message is different: repair then, do not
    treat it as permission to skip this gate next time.
 
@@ -158,13 +160,36 @@ Inside the checkout directory (see Locations):
 5. Tell the user "✓ 已更新到最新版本" — then resume whatever task triggered this.
    (The updated SKILL.md takes effect from the next Codex session; that's expected.)
 
+## Connection choice (once per workspace)
+
+Ask this **before** the public address exists (`c2c setup` / first `doctor --fix`
+that starts a tunnel). Do not mention tunnels, wrangler, DNS, or hostnames.
+Speak only of 临时地址 / 固定域名 / 登录 Cloudflare.
+
+1. `c2c tunnel status -w <workspace> --json`
+2. If `needsChoice` is false: do not ask again.
+3. If `needsChoice` is true: tell the user exactly `userPrompt` and wait.
+   - 没有账号 / 没有域名 / 临时 / 不用 →
+     `c2c tunnel choose -w <ws> --mode quick --json`
+   - 有域名（例如 example.com）→ first tell them `loginPrompt`, then
+     `c2c tunnel choose -w <ws> --mode named --zone <domain> --json`.
+     This may open the user's own browser (the Cloudflare exception in
+     Golden rule 5). Wait until the command finishes.
+     If they said they have an account but gave no domain: ask once for the
+     domain. If the command returns `need: "zone"`, ask once and retry.
+     If `fallback` is true: tell them `userMessage` and continue on the
+     temporary address. Do not retry named unless they ask.
+4. Never put connection credentials in the project. The CLI stores them in
+   the C2C state directory.
+
 ## Workflow: first-time setup（"使用 Codex with ChatGPT 完成首次配置"）
 
 1. Detect prerequisites yourself: `node --version` (>= 20), and check `cloudflared`.
    - If cloudflared is missing on macOS run `brew install cloudflared`; on Windows use
      `winget install Cloudflare.cloudflared`. Do this yourself; don't ask.
 2. If the c2c repo has no `node_modules`, run `pnpm install && pnpm build` in it.
-3. Run: `c2c sandbox-allow --json` then `c2c setup -w <workspace> --json`.
+3. Run `c2c sandbox-allow --json`, then **Connection choice**, then
+   `c2c setup -w <workspace> --json`.
    `sandbox-allow` edits Codex `config.toml` only — it adds C2C's state directory
    to `[sandbox_workspace_write].writable_roots` so later chats can write logs
    without elevation. If the write is denied, request approval and retry once.
@@ -246,9 +271,13 @@ Protocol states: INIT → PLAN → EXECUTING → EXECUTED → REVIEW → (PLAN |
 All control messages start with `[C2C]`. Keep Codex→ChatGPT messages under 1 KB.
 ChatGPT's replies are expected to be substantive (see step 3). Docs: `docs/protocol.md`.
 
-0. `c2c doctor -w <workspace> --json` (auto-repairs). **Doctor gate:** if local
+0. `c2c tunnel status -w <workspace> --json`. If `needsChoice`, follow
+   **Connection choice** first (existing installs: ask once, then remember).
+   Then `c2c doctor -w <workspace> --json` (auto-repairs). **Doctor gate:** if local
    is not green, do not open ChatGPT and do not send INIT. If
-   `chatgptRepair.needed` is true, tell the user `chatgptRepair.userMessage`
+   `namedRepair.needed` is true, tell the user `namedRepair.userMessage`, run
+   `c2c tunnel login --json` (their browser; Cloudflare exception), then doctor
+   again. If `chatgptRepair.needed` is true, tell the user `chatgptRepair.userMessage`
    (one paragraph, no internals), run **Workflow: reconnect after address
    reclaim**, then doctor again and only continue when the gate is green.
    Generate task id: `c2c_` + 4 random hex chars.
@@ -364,9 +393,11 @@ the previous public address is gone. Doctor already started a new one.
 
 1. `c2c doctor -w <workspace> --json`. Doctor gate: do not open ChatGPT / send
    `[C2C]` until local is green, except reconnect settings pages.
-2. If `chatgptRepair.needed`, follow **reconnect after address reclaim**, then
+2. If `namedRepair.needed`, tell the user `namedRepair.userMessage`, run
+   `c2c tunnel login --json`, then doctor again. Do not Delete the connector.
+3. If `chatgptRepair.needed`, follow **reconnect after address reclaim**, then
    doctor again.
-3. Otherwise apply the recovery map. Only involve the user for login / 2FA /
+4. Otherwise apply the recovery map. Only involve the user for login / 2FA /
    CAPTCHA — one action.
 
 ## Recovery map
@@ -374,7 +405,7 @@ the previous public address is gone. Doctor already started a new one.
 | Symptom | Action |
 | --- | --- |
 | Bridge not running | `c2c start` (doctor does this automatically) |
-| Tunnel dead / URL unreachable / 全关掉后连接失效 | `c2c doctor` → if `chatgptRepair.needed`, tell the user the message, then **Delete** THIS workspace's connector only (`connectorName`) and create it again. Never Reconnect. |
+| Tunnel dead / URL unreachable / 全关掉后连接失效 | `c2c doctor` → if `namedRepair.needed`, login to Cloudflare and doctor again (do not Delete). If `chatgptRepair.needed`, tell the user the message, then **Delete** THIS workspace's connector only (`connectorName`) and create it again. Never Reconnect. |
 | ChatGPT says tool call failed / 401 | token expired or revoked → re-pair (new pairing code + authorize) |
 | Pairing code rejected/expired | `c2c pair --json` for a fresh code |
 | Port conflict | handled automatically; never surface to the user |

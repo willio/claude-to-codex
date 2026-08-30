@@ -33,6 +33,16 @@ Fixed ChatGPT pages for first-time setup and later repair (do not hunt the UI):
 ### Tunnel URL unreachable / ChatGPT says the connector is broken
 Same as above: `c2c doctor`, then Delete + recreate THIS workspace's
 connector if `chatgptRepair.needed`. Fresh pairing code: `c2c pair`.
+If this workspace uses a stable hostname, doctor sets `namedRepair` instead —
+re-login to Cloudflare (`c2c tunnel login`) and doctor again. Do not Delete
+the connector; the address did not change.
+
+### I have a Cloudflare domain and want a stable hostname
+During first-time setup (or the next coding session, once), say you have a
+Cloudflare account and give the domain. Codex opens a browser for Cloudflare
+login, then keeps `c2c-<project>.your-domain.com`. To stay on the temporary
+address, say you do not have a domain. Switching later: tell Codex you want
+the stable hostname; it runs `c2c tunnel choose --mode named --zone <domain>`.
 
 ### "配对码无效/过期"
 Pairing codes are one-time and expire after ~5 minutes:
