@@ -1,172 +1,186 @@
-# Codex with ChatGPT
+# Codex with Claude
 
 [English](README.md) | **简体中文**
 
-> ChatGPT 负责思考，Codex 负责干活。
-
-## 解决什么问题
-
-ChatGPT 付费订阅的网页版额度大量闲置，Codex 却在消耗紧张的 API 额度做
-规划和 Review。本项目把"思考"交给你已付费的网页版 ChatGPT，Codex 只负责
-执行。不用 API Key、不搞逆向代理——官方网页 + 只读 MCP 桥接。
+> Claude 负责思考，Codex 负责执行。
 
 ## 这是什么
 
-把 ChatGPT 网页版变成 Codex 编码会话的"规划与审查大脑"，而执行权完全保留在
-Codex 手里。你的仓库永远不会被上传——ChatGPT 通过一条安全的、OAuth 保护的
-**只读** MCP 连接，按需读取当前工作区里它真正需要的那几行代码。
+本项目把 Claude 网页版作为 Codex 编码会话的规划与审查大脑，同时把所有执行权保留在 Codex 手里。
 
-## 一段话安装（纯小白专用）
+不需要 Claude API Key，也不使用逆向代理。Claude 通过一条 OAuth 保护的公网只读 MCP 连接，按需读取当前工作区的信息。
 
-不懂 git、Node、终端？完全不需要懂。把下面这段话原样复制给你的编码
-Agent（Codex），然后去倒杯咖啡：
+职责边界很明确：
+
+- Claude：推理、规划、检查、Review。
+- Codex：编辑文件、Shell、git、测试、修复和提交。
+- C2C Bridge：只读地提供工作区和 Codex 已记录的执行信息。
+
+Claude 不会获得写文件、删除文件、执行任意命令或提交代码的 MCP 工具。
+
+## 环境要求
+
+- Node.js >= 20
+- git
+- 公网 MCP 连接需要 `cloudflared`
+- Claude Web 支持自定义远程 Connector
+
+## 安装
+
+```bash
+git clone https://github.com/willio/codex-with-claude.git ~/codex-with-claude
+cd ~/codex-with-claude
+corepack pnpm install
+corepack pnpm build
+```
+
+然后把 `skill/SKILL.md` 安装为 Codex Skill，并按照其中的首次配置流程操作。
+
+## 首次配置
+
+运行：
+
+```bash
+c2c setup
+```
+
+C2C 会启动本地 Bridge、建立公网 HTTPS Tunnel，并返回 MCP 地址和一次性配对码。
+
+接下来在 Claude Web：
+
+1. 打开 **Customize > Connectors**。
+2. 用 C2C 提供的 MCP 地址添加 Custom Connector。
+3. 完成 OAuth 授权。
+4. 在 C2C 授权页面输入一次性配对码。
+5. 启用 Connector，然后让 Claude 调用 `workspace_info`，确认连接的是正确工作区。
+
+在 Claude 中添加 Connector 是明确的用户操作。Codex Skill 会准备和诊断本地端，但不会假装可以自动操作 Claude 的 Connector UI。
+
+默认可以使用 Cloudflare Quick Tunnel；其公网地址在重启后可能改变。如果需要稳定地址，可以配置 Named Tunnel。
+
+## 工作流程
+
+协调协议保持极小：
 
 ```text
-请帮我完整安装并配置 Codex with ChatGPT，全程自动，我是不懂技术的小白，
-所有事情你自己做：
-
-1. 环境自检：需要 git 和 Node.js ≥ 20，缺什么就自动安装
-  （macOS 用 Homebrew，Windows 用 winget），同时安装 cloudflared。
-2. 下载：把 https://github.com/XiaoDuoYa/codex-with-chatgpt 克隆到
-   ~/codex-with-chatgpt（已存在就 git pull 更新）。
-3. 构建：在该目录里执行 corepack pnpm install 和 corepack pnpm build。
-4. 安装 Skill：把仓库里的 skill/SKILL.md 复制到
-   ~/.codex/skills/codex-with-chatgpt/SKILL.md，并把文件中
-   "The codex-with-chatgpt checkout lives at:" 那一行的路径改成实际克隆路径。
-5. 首次配置：按 SKILL.md 里的 first-time setup 流程执行
-  （运行 c2c setup，用内置浏览器打开 ChatGPT 配置连接器并输入配对码）。
-   全程只用内置浏览器，禁止打开任何第三方浏览器。
-6. 只有遇到需要我登录（ChatGPT / Cloudflare）、验证码或两步验证时才叫我，
-   而且一次只告诉我一个动作。
-7. 完成后给我看 ✓ 清单，并确认文件读取测试通过。我不懂 MCP、OAuth、
-   Tunnel、端口这些词，不要向我解释；出了问题先自己修。
+INIT -> PLAN -> EXECUTED -> REVIEW -> DONE
 ```
 
-**更新**：Skill 每天自动检查一次 GitHub，有新版本会自动更新并继续任务，
-无需任何操作；也可以随时对 Codex 说"更新 Codex with ChatGPT"。
+Claude 通过 MCP 自己读取源码、git diff、git 状态和 Codex 已记录的执行结果，不需要 Codex 在对话中粘贴大量文件内容或日志。
 
-## 安装 → 配置 → 使用（手动版）
+目前提供 8 个只读 MCP 工具：
 
-1. 安装 Codex Skill：把 `skill/` 复制到 `~/.codex/skills/codex-with-chatgpt/`。
-2. 对 Codex 说：**"使用 Codex with ChatGPT 完成首次配置。"**
-3. 之后正常使用：**"使用 Codex with ChatGPT，帮我实现 XXX。"**
+- `workspace_info`
+- `list_directory`
+- `read_file`
+- `search_workspace`
+- `git_status`
+- `git_diff`
+- `test_status`
+- `execution_summary`
 
-说明书到此结束。你不需要知道 MCP、OAuth、Tunnel、端口、localhost 是什么——
-Codex 会自动完成所有配置，你只会看到：
+其中 `test_status` 和 `execution_summary` 只读取 Codex 已记录的数据，不会执行测试或命令。
 
-```
-Codex with ChatGPT
+## 架构
 
-✓ 当前项目已识别
-✓ Workspace Bridge 已启动
-✓ 安全连接已建立
-✓ ChatGPT 已连接
-✓ 文件读取测试通过
-
-Ready.
-```
-
-唯一可能需要你动手的步骤：登录 ChatGPT（如果要用固定域名，再登录一次 Cloudflare）。
-
-### 可选的固定域名
-
-默认公网地址是临时的，桥重启后会变。Codex 会删掉这个项目的 ChatGPT 插件再按新地址加回去。
-
-如果你有 Cloudflare 账号，并且域名已经加在 Cloudflare 上，首次配置时（老用户则在下一次编码时问一次）会问你要不要用固定域名，例如 `c2c-<项目>.你的域名`。选是的话，浏览器里授权一次 Cloudflare 即可。之后重启一般不用再改插件。没有账号、不想用、登录失败：继续用临时地址，功能一样，只是修复更慢。
-
-凭证放在系统目录，不进项目。
-
-## 工作原理
-
-```
-             ┌───────────────────────────┐
-             │      ChatGPT 网页版       │
-             │   推理 / 规划 / 审查      │
-             └──────────┬──────────▲─────┘
-                        │          │
-               MCP      │          │ Computer Use
-              数据面    │          │ 控制面（消息 < 1 KB）
-                        ▼          │
-             ┌─────────────────────┐
-             │      C2C Bridge     │   仅监听本机回环地址
-             │  只读 MCP           │   OAuth 2.1 + 一次性配对码
-             │  OAuth + 配对       │   Cloudflare Quick Tunnel
-             │  Tunnel 管理        │
-             └──────────┬──────────┘
-                        │  只读
-                        ▼
-             ┌─────────────────────┐          ┌─────────────────────┐
-             │     本地工作区      │◀─────────│    Codex Harness    │
-             └─────────────────────┘ 编辑/git │  Shell / 测试 / 修复 │
-                                              └─────────────────────┘
+```text
+             +---------------------------+
+             |       Claude Web          |
+             |    推理 / 规划 / 审查     |
+             +-------------+-------------+
+                           |
+                    Remote MCP + OAuth
+                           |
+                           v
+             +---------------------------+
+             |        C2C Bridge         |
+             |         只读 MCP          |
+             | OAuth + 一次性配对码      |
+             |   Cloudflare Tunnel       |
+             +-------------+-------------+
+                           |
+                          只读
+                           v
+             +---------------------------+
+             |         本地工作区        |
+             +-------------^-------------+
+                           |
+                    编辑 / git / shell
+                           |
+             +-------------+-------------+
+             |       Codex Harness       |
+             |     执行 / 测试 / 修复    |
+             +---------------------------+
 ```
 
-- **控制面（Computer Use）**：Codex 与 ChatGPT 之间只交换极小的结构化 `[C2C]`
-  状态消息——`INIT → PLAN → EXECUTED → REVIEW → DONE`。绝不粘贴 diff、日志
-  或文件内容。
-- **数据面（MCP）**：ChatGPT 缺什么自己拉什么，共 8 个只读工具：
-  `workspace_info`、`list_directory`、`read_file`、`search_workspace`、
-  `git_status`、`git_diff`、`test_status`、`execution_summary`。
-- **独立审查**：Codex 执行完毕后，ChatGPT 通过 MCP 亲自检查真实的 git diff
-  和测试记录——绝不因为 Codex 说"测试全过"就直接相信。
+## 安全模型
 
-## 安全模型（简版）
+- **从构造上只读**：MCP 服务端没有写文件、删除、Shell、commit 或任意执行工具。
+- **工作区隔离**：授权绑定单一工作区；路径校验阻止 `../`、绝对路径和 symlink 逃逸。
+- **敏感文件策略**：`.env*`、密钥、SSH 和凭据默认拒绝；`.env.example` 可读取，`.c2cignore` 可以继续追加排除规则。
+- **公网地址不等于权限**：MCP Endpoint 强制 OAuth；知道 Tunnel URL 本身无法读取工作区。
+- **一次性配对**：浏览器只接触短期配对码，不接触本地长期凭据。
+- **工作区内容不可信**：源码或文档中的文字只是数据，不能扩大 Claude 的权限。
 
-- **从构造上只读**：服务端根本不存在写文件/删除/Shell/提交类工具，任何提示
-  注入都无法启用它们。
-- **一个工作区 = 一道边界**：每个令牌绑定单一工作区；路径校验基于规范化
-  realpath（symlink、`../`、绝对路径逃逸全部被拦截并有测试覆盖）。
-- **敏感文件永不外泄**：`.env*`、密钥、SSH、各类凭据默认拒绝
-  （`.env.example` 放行）；`.c2cignore` 可追加自定义规则。
-- **知道 URL 不等于有权限**：公网 MCP 端点强制 OAuth 2.1（PKCE S256、动态
-  客户端注册、refresh token 轮换）。无令牌：401；令牌属于别的工作区：403。
-- **模型永远接触不到长期凭据**：唯一会出现在浏览器里的秘密是一次性配对码
-  （5 分钟有效、限 5 次尝试、限速、用后即毁）。
+完整威胁模型见 [docs/security.md](docs/security.md)。
 
-完整威胁模型：[docs/security.md](docs/security.md)
+## CLI
 
-## 开发者
+```bash
+c2c setup
+c2c start
+c2c status
+c2c doctor
+c2c pair
+c2c unpair
+c2c logs
+c2c stop
+```
+
+`c2c doctor` 用于检查本地 Bridge、Tunnel、Codex Sandbox 配置和 Connector Endpoint。如果 Quick Tunnel 地址改变，它会定位当前工作区需要重新添加的 Claude Connector。
+
+## 兼容策略
+
+这是原 ChatGPT 实现的 Claude 专用 Fork。迁移采用明确的兼容层，而不是简单全文替换。
+
+如果机器上已经存在旧的 `codex-with-chatgpt` App State，而新的 `codex-with-claude` 目录还不存在，C2C 会继续使用旧目录，避免 OAuth、Workspace ID、Endpoint、Session 和执行记录突然丢失。新安装默认使用 `codex-with-claude`。
+
+少量内部常量和机器可读 CLI 字段暂时保留历史 ChatGPT 名称，避免已有调用方突然失效。详见 [docs/migration.md](docs/migration.md)。
+
+## 开发
 
 ```bash
 pnpm install
-pnpm build          # 产出 dist/，暴露 c2c 命令
-pnpm test           # vitest：76 个测试（路径安全、OAuth、配对、MCP 端到端）
-
-c2c setup           # 一条命令：Bridge + 隧道 + 配对码
-c2c sandbox-allow   # 把本地设置目录加入 Codex 沙箱白名单（macOS / Windows）
-c2c status / doctor / pair / unpair / logs / stop
+pnpm typecheck
+pnpm test
+pnpm build
 ```
 
-环境要求：Node.js >= 20、git；公网连接需要 `cloudflared`
-（自动检测，Skill 会替你安装）。
+CI 会在 Frozen Lockfile 安装后执行 TypeScript 检查、完整测试和 Build。
 
-文档：[架构](docs/architecture.md) · [协议](docs/protocol.md) ·
-[安全](docs/security.md) · [故障排查](docs/troubleshooting.md)
+目录结构：
 
-## 目录结构
-
-```
+```text
 src/
-  bridge/     本机回环 HTTP 服务、端口自动恢复、管理 API
-  mcp/        8 个只读工具、无状态 Streamable HTTP
-  auth/       OAuth 2.1（PKCE、动态注册、refresh 轮换、吊销）
-  pairing/    一次性配对码（CSPRNG、TTL、限速）
-  workspace/  路径收敛、敏感文件策略、搜索、git
-  tunnel/     TunnelProvider 抽象 + Cloudflare Quick Tunnel
-  execution/  审查闭环所需的执行记录
-  process/    守护进程生命周期
-  cli/        c2c 命令行
-skill/        Codex Skill（真正的 UX 层）
-tests/        单元 + 集成测试
-docs/         架构 / 协议 / 安全 / 故障排查
+  auth/       OAuth 2.1、PKCE、DCR、Refresh Rotation、吊销
+  bridge/     本机回环 HTTP 服务和管理 API
+  cli/        c2c CLI
+  execution/  Review 所需的执行记录
+  mcp/        只读 MCP 工具
+  pairing/    一次性配对码
+  process/    Daemon 生命周期
+  tunnel/     Cloudflare Quick / Named Tunnel
+  workspace/  路径边界、敏感文件策略、搜索、git
+skill/        Codex Skill
+tests/        单元测试和集成测试
+docs/         架构、协议、安全、迁移、故障排查
 ```
 
-## 状态与声明
+## 当前状态
 
-V1。已端到端验证：Bridge、OAuth + 配对、公网隧道、ChatGPT 连接器配置、
-零操作首次配置体验。
+Claude 适配已经覆盖 Connector Endpoint、OAuth 展示、Codex Skill、App State 兼容、CI，以及核心只读 MCP 安全边界。仍保留的旧 CLI 机器字段只用于兼容，后续应通过有版本的迁移再移除。
 
-**非官方社区项目，与 OpenAI 无关联，未获其背书。**
+非官方社区项目，与 Anthropic 或 OpenAI 均无关联，也未获其背书。
 
 ## 许可证
 
