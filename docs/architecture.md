@@ -2,11 +2,11 @@
 
 ```
              ┌───────────────────────────┐
-             │    ChatGPT Web / Sol      │
+             │       Claude Web          │
              │  Reason / Plan / Review   │
              └──────────┬──────────▲─────┘
                         │          │
-               MCP      │          │ Computer Use
+               MCP      │          │ Conversation
             Data Plane  │          │ Control Plane
                         ▼          │
              ┌─────────────────────┐
@@ -30,9 +30,9 @@
 
 ## Principles
 
-- **ChatGPT thinks. Codex works.** The bridge never re-implements a coding harness.
-- **Computer Use = control plane**: tiny `[C2C]` state messages (< 1 KB).
-- **MCP = data plane**: ChatGPT pulls files/diffs/search results itself.
+- **Claude thinks. Codex works.** The bridge never re-implements a coding harness.
+- **Conversation = control plane**: tiny `[C2C]` state messages (< 1 KB).
+- **MCP = data plane**: Claude pulls files/diffs/search results itself.
 - **Read-only by design**: no write/exec tools exist in V1 at all.
 - **Workspace is the security boundary**: one bridge = one workspace = one token audience.
 
@@ -53,7 +53,7 @@
 
 ## Request lifecycles
 
-**MCP call**: ChatGPT → tunnel (https) → bridge `/mcp` → bearer middleware
+**MCP call**: Claude Web → tunnel (https) → bridge `/mcp` → bearer middleware
 (401/403) → stateless StreamableHTTP transport → tool handler → workspace layer
 (path containment → ignore rules → pagination) → JSON result.
 
@@ -69,7 +69,7 @@ runtime state file; users never see ports.
 
 **Tunnel**: default is a Cloudflare Quick Tunnel (`cloudflared tunnel --url …`).
 The URL changes per start, so `c2c doctor` can restart it and tell the Skill to
-Delete + recreate that workspace's ChatGPT connector. A workspace may instead
+Delete + recreate that workspace's Claude connector. A workspace may instead
 choose a named hostname once (`c2c tunnel choose --mode named`). The Skill asks
 before the first public URL exists; `cloudflared tunnel login` is the only extra
 user step. Tunnel name, hostname and preference live under the OS state dir
@@ -77,4 +77,4 @@ user step. Tunnel name, hostname and preference live under the OS state dir
 `cloudflared tunnel --url … run <name>` so the public URL stays stable. If named
 provisioning fails, C2C falls back to Quick Tunnel. If a named tunnel later
 drops, doctor asks for a Cloudflare re-login (`namedRepair`) instead of
-rotating the ChatGPT connector.
+rotating the Claude connector.

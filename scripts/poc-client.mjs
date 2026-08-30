@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * PoC client that behaves like ChatGPT's MCP connector:
+ * PoC client that behaves like a remote MCP connector client (Claude Web):
  *   1. hit /mcp unauthenticated -> expect 401 + resource metadata
  *   2. discover OAuth metadata
  *   3. dynamic client registration
