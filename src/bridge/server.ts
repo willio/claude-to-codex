@@ -15,7 +15,7 @@ import { namedTunnelBinding, readTunnelState } from "../tunnel/state.js";
 import { Logger, nullLogger } from "../logger/index.js";
 import { DEFAULT_HOST, DEFAULT_PORT } from "../config/paths.js";
 import { SERVICE_NAME, VERSION } from "../version.js";
-import { writeRuntimeState, clearRuntimeState, type RuntimeState } from "./runtime.js";
+import { writeRuntimeState, clearRuntimeState, probeBridge, type RuntimeState } from "./runtime.js";
 
 function tunnelForWorkspace(workspaceId: string, logger: Logger): TunnelProvider {
   const binding = namedTunnelBinding(readTunnelState(workspaceId));
@@ -211,6 +211,20 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
   });
 
   const { server, port } = await listen(app, host, opts.port ?? DEFAULT_PORT);
+  // If the preferred port was taken and we fell back to an ephemeral one,
+  // make sure we are not a duplicate daemon for an already-live bridge on the
+  // preferred port. Silently continuing here would overwrite the runtime
+  // state file and split the CLI (admin API) from the tunnel-bearing bridge.
+  const preferredPort = opts.port ?? DEFAULT_PORT;
+  if (port !== preferredPort) {
+    const occupant = await probeBridge(preferredPort);
+    if (occupant && occupant.workspaceId === workspace.id) {
+      server.close();
+      throw new Error(
+        `A bridge for this workspace is already running on port ${preferredPort}; not starting a duplicate.`
+      );
+    }
+  }
   const startedAt = new Date().toISOString();
   logger.info(`Bridge listening on ${host}:${port} for workspace ${workspace.name} (${workspace.id})`);
 
