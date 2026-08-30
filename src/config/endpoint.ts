@@ -1,14 +1,18 @@
 import path from "node:path";
 import { getStateDir, readJsonIfExists, writeSecureJson } from "./paths.js";
 
-export const CLAUDE_CONNECTORS_URL = "https://claude.ai/settings/connectors";
-export const CLAUDE_CREATE_CONNECTOR_URL = CLAUDE_CONNECTORS_URL;
+export const CONNECTOR_SETTINGS_URL = "https://claude.ai/settings/connectors";
+export const CREATE_CONNECTOR_URL = CONNECTOR_SETTINGS_URL;
 
-// Backward-compatible aliases for the existing CLI/Skill while the provider
-// naming is migrated. In this fork they intentionally resolve to Claude.
-export const CHATGPT_DEVELOPER_MODE_URL = CLAUDE_CONNECTORS_URL;
-export const CHATGPT_PLUGINS_URL = CLAUDE_CONNECTORS_URL;
-export const CHATGPT_CREATE_CONNECTOR_URL = CLAUDE_CREATE_CONNECTOR_URL;
+export const CLAUDE_CONNECTORS_URL = CONNECTOR_SETTINGS_URL;
+export const CLAUDE_CREATE_CONNECTOR_URL = CREATE_CONNECTOR_URL;
+
+/** @deprecated Use CONNECTOR_SETTINGS_URL. */
+export const CHATGPT_DEVELOPER_MODE_URL = CONNECTOR_SETTINGS_URL;
+/** @deprecated Use CONNECTOR_SETTINGS_URL. */
+export const CHATGPT_PLUGINS_URL = CONNECTOR_SETTINGS_URL;
+/** @deprecated Use CREATE_CONNECTOR_URL. */
+export const CHATGPT_CREATE_CONNECTOR_URL = CREATE_CONNECTOR_URL;
 
 export const DEFAULT_CONNECTOR_NAME = "Codex with Claude";
 
