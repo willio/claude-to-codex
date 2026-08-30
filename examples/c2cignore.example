@@ -1,4 +1,4 @@
-# .c2cignore — gitignore syntax; these paths become invisible to ChatGPT.
+# .c2cignore — gitignore syntax; these paths become invisible to Claude.
 # Sensitive defaults (.env, keys, credentials, SSH…) are always enforced
 # even without this file.
 

@@ -29,9 +29,9 @@ import { Logger } from "../logger/index.js";
 import { getStateDir } from "../config/paths.js";
 import { ensureSandboxAllowlist, getCodexConfigPath, isStateDirAllowlisted } from "../config/sandbox-allow.js";
 import {
-  CHATGPT_CREATE_CONNECTOR_URL,
-  CHATGPT_DEVELOPER_MODE_URL,
-  CHATGPT_PLUGINS_URL,
+  CONNECTOR_SETTINGS_URL,
+  CREATE_CONNECTOR_URL,
+  DEFAULT_CONNECTOR_NAME,
   connectorAction,
   connectorNameFor,
   mcpUrlFromPublic,
@@ -157,7 +157,7 @@ async function ensureBridgeAndTunnel(
 
 program
   .name("c2c")
-  .description(`${PRODUCT_NAME} — ChatGPT thinks. Codex works.`)
+  .description(`${PRODUCT_NAME} — Claude thinks. Codex works.`)
   .version(VERSION, "-v, --version")
   .configureHelp({ sortSubcommands: true });
 
@@ -230,7 +230,7 @@ program
       if (!opts.json) {
         say(PRODUCT_NAME);
         say("");
-        say("正在连接 ChatGPT…");
+        say("正在连接 Claude…");
         say("");
       }
       const sandbox = trySandboxAllow();
@@ -279,8 +279,7 @@ program
       say(`连接地址：${mcpUrl ?? `http://127.0.0.1:${runtime.port}/mcp`}`);
       say(`配对码：${pairingResult.code}（${Math.round((pairingResult.expiresAt - Date.now()) / 60000)} 分钟内有效）`);
       say("");
-      say("下一步：在 ChatGPT 的连接器设置中添加以上地址（OAuth），并在授权页输入配对码。");
-      say("如果你在使用 Codex Skill，这一步会自动完成。");
+      say("下一步：在 Claude 的 Customize > Connectors 中选择 Add custom connector 并填入以上地址（OAuth），在授权页输入配对码。");
     } catch (error) {
       handleCliError(error, opts.json);
     }
@@ -425,7 +424,7 @@ program
 
     // Tunnel + remote reachability. If this workspace once had a public URL,
     // a full quit reclaims it — restore a tunnel and tell the Skill to update
-    // the existing ChatGPT connector (never treat that as "local mode").
+    // the existing Claude connector (never treat that as "local mode").
     const lastEndpoint = workspace ? readLastEndpoint(workspace.id) : null;
     const connectorName = workspace
       ? connectorNameFor({
@@ -434,11 +433,11 @@ program
           previousName: lastEndpoint?.connectorName,
           hadEndpointBefore: Boolean(lastEndpoint),
         })
-      : "Codex with ChatGPT";
+      : DEFAULT_CONNECTOR_NAME;
     const tunnelState = workspace ? readTunnelState(workspace.id) : null;
     const namedReady = tunnelState ? isNamedTunnelReady(tunnelState) : false;
     let namedRepair: { needed: boolean; userMessage?: string } = { needed: false };
-    let chatgptRepair: {
+    let connectorRepair: {
       needed: boolean;
       reason?: string;
       connectorAction: "none" | "create" | "update";
@@ -448,6 +447,9 @@ program
       previousMcpUrl: string | null;
       pairingCode?: string;
       pairingExpiresAt?: number;
+      settingsUrl: string;
+      createConnectorUrl: string;
+      /** @deprecated legacy key names kept for older consumers */
       pages: {
         developerMode: string;
         plugins: string;
@@ -459,10 +461,12 @@ program
       connectorName,
       mcpUrl: lastEndpoint?.mcpUrl ?? null,
       previousMcpUrl: lastEndpoint?.mcpUrl ?? null,
+      settingsUrl: CONNECTOR_SETTINGS_URL,
+      createConnectorUrl: CREATE_CONNECTOR_URL,
       pages: {
-        developerMode: CHATGPT_DEVELOPER_MODE_URL,
-        plugins: CHATGPT_PLUGINS_URL,
-        createConnector: CHATGPT_CREATE_CONNECTOR_URL,
+        developerMode: CONNECTOR_SETTINGS_URL,
+        plugins: CONNECTOR_SETTINGS_URL,
+        createConnector: CREATE_CONNECTOR_URL,
       },
     };
 
@@ -527,8 +531,8 @@ program
               previous: lastEndpoint,
             })
           : connectorName;
-        chatgptRepair = {
-          ...chatgptRepair,
+        connectorRepair = {
+          ...connectorRepair,
           needed: action === "update",
           reason: action === "update" ? "address_reclaimed" : undefined,
           connectorAction: action,
@@ -540,8 +544,8 @@ program
         if (action === "update") {
           try {
             const pairing = await adminFetch<PairingResponse>(runtime, "POST", "/admin/pairing");
-            chatgptRepair.pairingCode = pairing.code;
-            chatgptRepair.pairingExpiresAt = pairing.expiresAt;
+            connectorRepair.pairingCode = pairing.code;
+            connectorRepair.pairingExpiresAt = pairing.expiresAt;
             results.push(`已生成新的配对码，需要更新「${boundName}」`);
           } catch (error) {
             report.oauth = { ok: false, detail: (error as Error).message };
@@ -552,8 +556,8 @@ program
         namedRepair = { needed: true, userMessage: NAMED_REPAIR_MESSAGE };
       } else if (expectedPublic) {
         report.tunnel = report.tunnel ?? { ok: false, detail: "安全连接未恢复" };
-        chatgptRepair = {
-          ...chatgptRepair,
+        connectorRepair = {
+          ...connectorRepair,
           needed: true,
           reason: "address_reclaimed",
           connectorAction: "update",
@@ -571,8 +575,8 @@ program
       namedRepair = { needed: true, userMessage: NAMED_REPAIR_MESSAGE };
     } else if (lastEndpoint?.publicUrl) {
       report.tunnel = { ok: false, detail: "安全连接未运行" };
-      chatgptRepair = {
-        ...chatgptRepair,
+      connectorRepair = {
+        ...connectorRepair,
         needed: true,
         reason: "address_reclaimed",
         connectorAction: "update",
@@ -582,7 +586,7 @@ program
     }
 
     if (opts.json) {
-      say(JSON.stringify({ report, repairs: results, chatgptRepair, namedRepair }));
+      say(JSON.stringify({ report, repairs: results, connectorRepair, namedRepair, chatgptRepair: connectorRepair }));
       return;
     }
     say(`${PRODUCT_NAME} Doctor`);
@@ -611,17 +615,17 @@ program
       say(namedRepair.userMessage);
       say("");
     }
-    if (chatgptRepair.needed && chatgptRepair.userMessage) {
-      say(chatgptRepair.userMessage);
-      if (chatgptRepair.mcpUrl) say(`新的连接地址：${chatgptRepair.mcpUrl}`);
-      if (chatgptRepair.pairingCode) say(`配对码：${chatgptRepair.pairingCode}`);
+    if (connectorRepair.needed && connectorRepair.userMessage) {
+      say(connectorRepair.userMessage);
+      if (connectorRepair.mcpUrl) say(`新的连接地址：${connectorRepair.mcpUrl}`);
+      if (connectorRepair.pairingCode) say(`配对码：${connectorRepair.pairingCode}`);
       say("");
     }
     say(
-      allOk && !chatgptRepair.needed && !namedRepair.needed
+      allOk && !connectorRepair.needed && !namedRepair.needed
         ? "Everything looks good."
-        : chatgptRepair.needed
-          ? "本地已就绪，还需要在 ChatGPT 删除并重新添加该连接。"
+        : connectorRepair.needed
+          ? "本地已就绪，还需要在 Claude 的 Customize > Connectors 中删除并重新添加该连接。"
           : namedRepair.needed
             ? "固定域名还没连上，需要先登录 Cloudflare。"
             : "仍有问题未解决，可尝试 `c2c restart --tunnel`。"
@@ -652,19 +656,21 @@ program
 
 program
   .command("unpair")
-  .description("Revoke ChatGPT's access to this workspace immediately")
+  .description("Revoke Claude's access to this workspace immediately")
   .option("-w, --workspace <path>")
   .action(async (opts: { workspace?: string }) => {
     const root = resolveWorkspace(opts.workspace);
     const workspace = new Workspace(root);
     const runtime = await findLiveBridge(workspace.id);
+    let revoked = 0;
     if (runtime) {
-      await adminFetch(runtime, "POST", "/admin/revoke-all");
+      const result = await adminFetch<{ revoked: number }>(runtime, "POST", "/admin/revoke-all");
+      revoked = result.revoked ?? 0;
     } else {
       // bridge not running: revoke directly in the persisted store
-      new AuthStore(workspace.id).revokeAll();
+      revoked = new AuthStore(workspace.id).revokeAll();
     }
-    check("已断开 ChatGPT 对当前项目的访问（所有令牌已吊销）");
+    check(`已断开 Claude 对当前项目的访问（已吊销 ${revoked} 个令牌）`);
   });
 
 // ---------------------------------------------------------------- logs / workspace / record
@@ -792,7 +798,7 @@ program
     emit({ checked: true, updateAvailable, localCommit: local.stdout, remoteCommit });
   });
 
-// ---------------------------------------------------------------- session (ChatGPT conversation memory)
+// ---------------------------------------------------------------- session (Claude conversation memory)
 
 interface SavedSession {
   url: string;
@@ -811,11 +817,11 @@ function sessionFile(workspaceId: string): string {
 
 const session = program
   .command("session")
-  .description("Remember and reuse the ChatGPT conversation for this workspace");
+  .description("Remember and reuse the Claude conversation for this workspace");
 
 session
   .command("get", { isDefault: true })
-  .description("Show the saved ChatGPT conversation for this workspace")
+  .description("Show the saved Claude conversation for this workspace")
   .option("-w, --workspace <path>")
   .option("--json", "machine-readable output", false)
   .action((opts: { workspace?: string; json: boolean }) => {
@@ -823,7 +829,7 @@ session
     const file = sessionFile(workspace.id);
     const saved = fs.existsSync(file) ? (JSON.parse(fs.readFileSync(file, "utf8")) as SavedSession) : null;
     if (opts.json) say(JSON.stringify({ ok: true, session: saved }));
-    else if (!saved) say("尚未记录 ChatGPT 会话。");
+    else if (!saved) say("尚未记录 Claude 会话。");
     else {
       say(`会话：${saved.title ?? "(untitled)"}`);
       say(`地址：${saved.url}`);
@@ -833,7 +839,7 @@ session
 
 session
   .command("set")
-  .description("Save the ChatGPT conversation to reuse in later tasks")
+  .description("Save the Claude conversation to reuse in later tasks")
   .option("-w, --workspace <path>")
   .requiredOption("--url <url>", "conversation URL as shown in the browser address bar")
   .option("--title <title>")
@@ -853,7 +859,7 @@ session
       savedAt: new Date().toISOString(),
     };
     fs.writeFileSync(file, JSON.stringify(saved, null, 2), { mode: 0o600 });
-    check("已记录 ChatGPT 会话，后续任务将复用");
+    check("已记录 Claude 会话，后续任务将复用");
   });
 
 session
@@ -863,7 +869,7 @@ session
   .action((opts: { workspace?: string }) => {
     const workspace = new Workspace(resolveWorkspace(opts.workspace));
     fs.rmSync(sessionFile(workspace.id), { force: true });
-    check("已清除会话记录，下次任务将新建 ChatGPT 会话");
+    check("已清除会话记录，下次任务将新建 Claude 会话");
   });
 
 program

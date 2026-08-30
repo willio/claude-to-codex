@@ -36,4 +36,4 @@ Workspace content is treated as untrusted project data, not as instructions to C
 
 ## Current migration status
 
-The Claude connector endpoint, product identity, package metadata, connector naming, and endpoint-repair behavior are migrated in the first slice. Some legacy internal identifiers and CLI/Skill copy still use `ChatGPT` names for backward compatibility; these are implementation labels rather than connector destinations and will be normalized in the next slice without changing persisted endpoint data.
+The connector endpoint, product identity, package metadata, connector naming, endpoint-repair behavior, CLI copy, and the Codex Skill are Claude-native. `doctor --json` exposes `connectorRepair` as the canonical machine-readable field; the legacy `chatgptRepair` key remains only as a deprecated alias, alongside the deprecated `CHATGPT_*` endpoint constants and the legacy `codex-with-chatgpt` state-directory fallback, all documented in [migration.md](migration.md).

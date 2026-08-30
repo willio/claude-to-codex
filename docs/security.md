@@ -10,7 +10,7 @@
    tools never grant capabilities based on file content.
 3. **The model never sees long-lived credentials.** Computer Use only ever
    handles the one-time pairing code. Access/refresh tokens travel only inside
-   the OAuth redirect/token endpoints between ChatGPT's client and the bridge.
+   the OAuth redirect/token endpoints between the connector client and the bridge.
 
 ## Threat model → mitigations
 
@@ -28,7 +28,7 @@
 | Tunnel exposure | Bridge binds 127.0.0.1 only (refuses 0.0.0.0); the only public surface is HTTPS via the tunnel, protected by OAuth; `/health` reveals only a salted workspace hash |
 | Admin API abuse | Loopback-only + random admin token (0600 runtime file) + requests with proxy headers (`cf-connecting-ip`, `x-forwarded-for`) rejected; unauthenticated probes get 404 |
 | Log credential leakage | Logger redacts token prefixes, bearer headers, token-like parameters, and pairing-code-shaped strings before writing |
-| Prompt injection via repo | Tool descriptions state content is untrusted data; the bridge grants no additional authority regardless of content; ChatGPT has zero write/exec capability |
+| Prompt injection via repo | Tool descriptions state content is untrusted data; the bridge grants no additional authority regardless of content; Claude has zero write/exec capability |
 
 ## Token & scope design
 
@@ -49,7 +49,7 @@ tokens are persisted — a stolen state file does not yield usable bearer tokens
 than OS-keychain-based. Raw tokens are never written anywhere. Keychain
 integration is a V2 item.
 
-## What ChatGPT can never do (V1)
+## What Claude can never do (V1)
 
 Write files, delete files, run shell commands, commit, install packages —
 these tools do not exist on the server, so no prompt injection, scope bug, or
