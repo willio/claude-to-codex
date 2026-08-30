@@ -18,9 +18,10 @@ can (restarts the bridge, restarts the tunnel) without asking.
 ### Everything was quit and ChatGPT can no longer connect
 Quitting Codex / the terminal stops the public address. The next `c2c doctor`
 starts a new address and sets `chatgptRepair.needed`. The Skill should tell the
-user that the old address expired, then update THIS workspace's connector
-(`chatgptRepair.connectorName`) and re-pair. Other workspaces keep their own
-connectors so two projects can stay connected at once.
+user that the old address expired, then **Delete** THIS workspace's
+connector (`chatgptRepair.connectorName`) and create it again with the new
+address (never click Reconnect — the old URL is dead). Other workspaces keep
+their own connectors so two projects can stay connected at once.
 
 Fixed ChatGPT pages for first-time setup and later repair (do not hunt the UI):
 
@@ -30,8 +31,8 @@ Fixed ChatGPT pages for first-time setup and later repair (do not hunt the UI):
   https://chatgpt.com/plugins#settings/Connectors?create-connector=true&redirectAfter=%2Fplugins
 
 ### Tunnel URL unreachable / ChatGPT says the connector is broken
-Same as above: `c2c doctor`, then update the existing connector if
-`chatgptRepair.needed`. Fresh pairing code: `c2c pair`.
+Same as above: `c2c doctor`, then Delete + recreate THIS workspace's
+connector if `chatgptRepair.needed`. Fresh pairing code: `c2c pair`.
 
 ### "配对码无效/过期"
 Pairing codes are one-time and expire after ~5 minutes:
@@ -44,8 +45,9 @@ generates a fresh one (older codes become invalid immediately).
 
 ### ChatGPT gets 401 on every tool call
 The access token expired and refresh failed (e.g. after `c2c unpair` or a
-long offline period). Reconnect the connector in ChatGPT (it will run OAuth
-again) and enter a fresh pairing code.
+long offline period). Delete THIS workspace's connector if the address also
+changed; otherwise run Authorize again in ChatGPT and enter a fresh pairing
+code. Never use Reconnect when the public address has been replaced.
 
 ### cloudflared is not installed
 macOS: `brew install cloudflared`

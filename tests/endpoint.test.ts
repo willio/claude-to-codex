@@ -5,6 +5,7 @@ import {
   DEFAULT_CONNECTOR_NAME,
   mcpUrlFromPublic,
   normalizePublicUrl,
+  reclaimUserMessage,
 } from "../src/config/endpoint.js";
 
 describe("connectorAction", () => {
@@ -18,6 +19,8 @@ describe("connectorAction", () => {
 
   it("updates when the old address was reclaimed", () => {
     expect(connectorAction("https://old.trycloudflare.com/mcp", "https://new.trycloudflare.com/mcp")).toBe("update");
+    expect(reclaimUserMessage("Codex with ChatGPT")).toContain("删除");
+    expect(reclaimUserMessage("Codex with ChatGPT")).not.toContain("Reconnect");
   });
 
   it("does nothing without a next URL", () => {

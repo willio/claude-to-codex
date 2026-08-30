@@ -550,7 +550,7 @@ program
       if (chatgptRepair.pairingCode) say(`配对码：${chatgptRepair.pairingCode}`);
       say("");
     }
-    say(allOk && !chatgptRepair.needed ? "Everything looks good." : chatgptRepair.needed ? "本地已就绪，还需要在 ChatGPT 更新现有连接。" : "仍有问题未解决，可尝试 `c2c restart --tunnel`。");
+    say(allOk && !chatgptRepair.needed ? "Everything looks good." : chatgptRepair.needed ? "本地已就绪，还需要在 ChatGPT 删除并重新添加该连接。" : "仍有问题未解决，可尝试 `c2c restart --tunnel`。");
     if (!allOk) process.exitCode = 1;
   });
 
