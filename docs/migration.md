@@ -18,4 +18,11 @@ If both directories exist, the Claude directory wins.
 
 ## Machine-readable CLI output
 
-Legacy JSON names such as `chatgptRepair` are retained until a versioned compatibility change is introduced. User-visible Claude migration should not require consumers to update parsers in the same release.
+`c2c doctor --json` exposes `connectorRepair` as the canonical connector-repair
+payload. The legacy `chatgptRepair` key is still emitted as a deprecated alias
+pointing at the same object, so existing parsers keep working. New integrations
+must read `connectorRepair`.
+
+Legacy JSON names are retained until a versioned compatibility change is
+introduced. User-visible Claude migration should not require consumers to
+update parsers in the same release.

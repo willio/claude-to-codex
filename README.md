@@ -146,7 +146,7 @@ This repository is a Claude-focused fork of the original ChatGPT implementation.
 
 Existing installations that already have a `codex-with-chatgpt` app-state directory continue using it when no `codex-with-claude` directory exists. This prevents silent loss of OAuth, workspace, endpoint, session, and execution state. New installations use `codex-with-claude`.
 
-Some deprecated internal constants and machine-readable CLI fields retain historical ChatGPT names temporarily so existing consumers do not break. See [docs/migration.md](docs/migration.md).
+Some deprecated internal constants and the machine-readable `chatgptRepair` doctor field (now canonical as `connectorRepair`) retain their historical ChatGPT names temporarily so existing consumers do not break. See [docs/migration.md](docs/migration.md).
 
 ## Development
 

@@ -51,10 +51,10 @@ export function namedTunnelBinding(state: TunnelState): { tunnelName: string; ho
   return { tunnelName: state.tunnelName, hostname: state.hostname };
 }
 
-export const TUNNEL_CHOICE_PROMPT = `连 ChatGPT 之前，有一条可选的。
+export const TUNNEL_CHOICE_PROMPT = `连 Claude 之前，有一条可选的。
 你有没有 Cloudflare 账号，并且有没有一个域名已经加在 Cloudflare 里？
-- 有：可以用固定域名。插件配一次，以后电脑重启一般不用再改插件。要登录一次 Cloudflare，并在你的域名下加一个子域名。
-- 没有：用临时地址。不用注册，功能一样。但电脑重启后地址常会变，ChatGPT 里的旧地址会失效。我会自己删掉这个项目的插件、用新地址再加回去，你偶尔要再登一下 ChatGPT。能修好，只是更慢。
+- 有：可以用固定域名。连接器配一次，以后电脑重启一般不用再改连接器。要登录一次 Cloudflare，并在你的域名下加一个子域名。
+- 没有：用临时地址。不用注册，功能一样。但电脑重启后地址常会变，Claude 里的旧地址会失效。需要在 Claude 的 Customize > Connectors 中删掉这个项目的连接器、用新地址再加回去。能修好，只是更慢。
 没有账号也完全能用。你选哪个？如果有域名，直接告诉我域名（例如 example.com）。`;
 
 export const NAMED_LOGIN_PROMPT =

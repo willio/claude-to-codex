@@ -5,7 +5,7 @@ import type { Logger } from "../logger/index.js";
 
 /**
  * Stateless Streamable HTTP handler: a fresh McpServer + transport per POST.
- * This maximizes compatibility with remote MCP clients (including ChatGPT)
+ * This maximizes compatibility with remote MCP clients (including Claude Web)
  * and avoids cross-request session state on a public endpoint.
  */
 export function createMcpHttpHandler(makeServer: () => McpServer, logger: Logger) {
