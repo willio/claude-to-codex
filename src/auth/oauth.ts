@@ -69,6 +69,7 @@ function pairingPage(opts: {
   requestId: string;
   workspaceName: string;
   scopes: string[];
+  clientName?: string;
   error?: string;
 }): string {
   const scopeLabels: Record<string, string> = {
@@ -78,15 +79,12 @@ function pairingPage(opts: {
     "execution.read": "Read Codex execution summaries",
     offline_access: "Stay connected between sessions",
   };
-  const scopeList = opts.scopes
-    .map((scope) => `<li>${escapeHtml(scopeLabels[scope] ?? scope)}</li>`)
-    .join("");
-  const errorHtml = opts.error
-    ? `<p class="error" role="alert">${escapeHtml(opts.error)}</p>`
-    : "";
+  const scopeList = opts.scopes.map((scope) => `<li>${escapeHtml(scopeLabels[scope] ?? scope)}</li>`).join("");
+  const errorHtml = opts.error ? `<p class="error" role="alert">${escapeHtml(opts.error)}</p>` : "";
   const escapedProductName = escapeHtml(PRODUCT_NAME);
   const escapedWorkspaceName = escapeHtml(opts.workspaceName);
   const escapedRequestId = escapeHtml(opts.requestId);
+  const escapedClientName = escapeHtml(opts.clientName ?? "Claude");
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -119,7 +117,7 @@ function pairingPage(opts: {
 <body>
 <div class="card">
   <h1>${escapedProductName}</h1>
-  <p class="sub">ChatGPT is requesting access to workspace <strong>${escapedWorkspaceName}</strong> (read-only):</p>
+  <p class="sub">${escapedClientName} is requesting access to workspace <strong>${escapedWorkspaceName}</strong> (read-only):</p>
   <ul>${scopeList}</ul>
   <form method="POST" action="authorize">
     <input type="hidden" name="request_id" value="${escapedRequestId}">
@@ -140,12 +138,8 @@ export function createOAuthRouter(deps: OAuthDeps): Router {
 
   const prunePending = (): void => {
     const now = Date.now();
-    for (const [id, request] of pendingRequests) {
-      if (now > request.expiresAt) pendingRequests.delete(id);
-    }
+    for (const [id, request] of pendingRequests) if (now > request.expiresAt) pendingRequests.delete(id);
   };
-
-  // ---- Discovery metadata -------------------------------------------------
 
   const asMetadataHandler = (req: Request, res: Response): void => {
     res.json(authorizationServerMetadata(deps.getBaseUrl(req)));
@@ -159,19 +153,11 @@ export function createOAuthRouter(deps: OAuthDeps): Router {
   router.get("/.well-known/oauth-protected-resource", prMetadataHandler);
   router.get("/.well-known/oauth-protected-resource/mcp", prMetadataHandler);
 
-  // ---- Dynamic Client Registration (RFC 7591) ------------------------------
-
   router.post("/oauth/register", json(), (req, res) => {
     const body = req.body as { client_name?: string; redirect_uris?: unknown };
     const redirectUris = Array.isArray(body.redirect_uris) ? body.redirect_uris : [];
-    if (
-      redirectUris.length === 0 ||
-      !redirectUris.every((uri) => typeof uri === "string" && isAllowedRedirectUri(uri))
-    ) {
-      res.status(400).json({
-        error: "invalid_redirect_uri",
-        error_description: "redirect_uris must be https URLs (or http://localhost for development)",
-      });
+    if (redirectUris.length === 0 || !redirectUris.every((uri) => typeof uri === "string" && isAllowedRedirectUri(uri))) {
+      res.status(400).json({ error: "invalid_redirect_uri", error_description: "redirect_uris must be https URLs (or http://localhost for development)" });
       return;
     }
     const client = deps.store.registerClient({
@@ -189,15 +175,13 @@ export function createOAuthRouter(deps: OAuthDeps): Router {
     });
   });
 
-  // ---- Authorization endpoint ----------------------------------------------
-
   router.get("/oauth/authorize", (req, res) => {
     prunePending();
     const query = req.query as Record<string, string | undefined>;
     const client = query.client_id ? deps.store.getClient(query.client_id) : undefined;
     if (!client) {
       setAuthSecurityHeaders(res);
-      res.status(400).send("Unknown client. Please reconnect from ChatGPT.");
+      res.status(400).send("Unknown client. Please reconnect from your MCP client.");
       return;
     }
     const redirectUri = query.redirect_uri;
@@ -223,21 +207,17 @@ export function createOAuthRouter(deps: OAuthDeps): Router {
     }
     const scopes = filterScopes(query.scope);
     const request: PendingAuthRequest = {
-      id: randomBytes(16).toString("hex"),
-      clientId: client.clientId,
-      redirectUri,
-      scopes,
-      state: query.state,
-      codeChallenge: query.code_challenge,
-      resource: query.resource,
-      expiresAt: Date.now() + 10 * 60_000,
+      id: randomBytes(16).toString("hex"), clientId: client.clientId, redirectUri, scopes,
+      state: query.state, codeChallenge: query.code_challenge, resource: query.resource, expiresAt: Date.now() + 10 * 60_000,
     };
     pendingRequests.set(request.id, request);
     setAuthSecurityHeaders(res);
-    res
-      .status(200)
-      .type("html")
-      .send(pairingPage({ requestId: request.id, workspaceName: deps.workspaceName, scopes }));
+    res.status(200).type("html").send(pairingPage({
+      requestId: request.id,
+      workspaceName: deps.workspaceName,
+      scopes,
+      clientName: client.clientName,
+    }));
   });
 
   router.post("/oauth/authorize", urlencoded({ extended: false }), (req, res) => {
@@ -246,7 +226,7 @@ export function createOAuthRouter(deps: OAuthDeps): Router {
     const request = body.request_id ? pendingRequests.get(body.request_id) : undefined;
     if (!request) {
       setAuthSecurityHeaders(res);
-      res.status(400).send("This authorization request has expired. Please reconnect from ChatGPT.");
+      res.status(400).send("This authorization request has expired. Please reconnect from your MCP client.");
       return;
     }
     const verdict = deps.pairing.verify(body.pairing_code ?? "", req.ip);
@@ -260,27 +240,20 @@ export function createOAuthRouter(deps: OAuthDeps): Router {
       };
       deps.logger.warn(`Pairing verification failed: ${verdict.reason}`);
       setAuthSecurityHeaders(res);
-      res
-        .status(verdict.reason === "invalid" ? 401 : 410)
-        .type("html")
-        .send(
-          pairingPage({
-            requestId: request.id,
-            workspaceName: deps.workspaceName,
-            scopes: request.scopes,
-            error: messages[verdict.reason] ?? "Verification failed.",
-          })
-        );
+      const client = deps.store.getClient(request.clientId);
+      res.status(verdict.reason === "invalid" ? 401 : 410).type("html").send(pairingPage({
+        requestId: request.id,
+        workspaceName: deps.workspaceName,
+        scopes: request.scopes,
+        clientName: client?.clientName,
+        error: messages[verdict.reason] ?? "Verification failed.",
+      }));
       return;
     }
     pendingRequests.delete(request.id);
     const code = deps.store.createAuthorizationCode({
-      clientId: request.clientId,
-      redirectUri: request.redirectUri,
-      codeChallenge: request.codeChallenge,
-      scopes: request.scopes,
-      pairingSessionId: verdict.sessionId,
-      resource: request.resource,
+      clientId: request.clientId, redirectUri: request.redirectUri, codeChallenge: request.codeChallenge,
+      scopes: request.scopes, pairingSessionId: verdict.sessionId, resource: request.resource,
     });
     deps.logger.info(`Pairing verified; issued authorization code for client ${request.clientId}`);
     const url = new URL(request.redirectUri);
@@ -289,69 +262,34 @@ export function createOAuthRouter(deps: OAuthDeps): Router {
     res.redirect(url.toString());
   });
 
-  // ---- Token endpoint --------------------------------------------------------
-
   router.post("/oauth/token", urlencoded({ extended: false }), json(), (req, res) => {
     const body = req.body as Record<string, string | undefined>;
     const grantType = body.grant_type;
-
     if (grantType === "authorization_code") {
       const { code, code_verifier: codeVerifier, client_id: clientId, redirect_uri: redirectUri } = body;
-      if (!code || !codeVerifier || !clientId) {
-        res.status(400).json({ error: "invalid_request" });
-        return;
-      }
+      if (!code || !codeVerifier || !clientId) { res.status(400).json({ error: "invalid_request" }); return; }
       const record = deps.store.consumeAuthorizationCode(code);
-      if (!record || record.clientId !== clientId) {
-        res.status(400).json({ error: "invalid_grant" });
-        return;
-      }
-      if (redirectUri && redirectUri !== record.redirectUri) {
-        res.status(400).json({ error: "invalid_grant", error_description: "redirect_uri mismatch" });
-        return;
-      }
+      if (!record || record.clientId !== clientId) { res.status(400).json({ error: "invalid_grant" }); return; }
+      if (redirectUri && redirectUri !== record.redirectUri) { res.status(400).json({ error: "invalid_grant", error_description: "redirect_uri mismatch" }); return; }
       if (!safeEqual(base64UrlSha256(codeVerifier), record.codeChallenge)) {
         deps.logger.warn("PKCE verification failed at token endpoint");
-        res.status(400).json({ error: "invalid_grant", error_description: "PKCE verification failed" });
-        return;
+        res.status(400).json({ error: "invalid_grant", error_description: "PKCE verification failed" }); return;
       }
       const tokens = deps.store.issueTokens({ clientId, scopes: record.scopes });
       deps.logger.info(`Issued access token for client ${clientId}`);
-      res.json({
-        access_token: tokens.accessToken,
-        token_type: "Bearer",
-        expires_in: tokens.expiresIn,
-        refresh_token: tokens.refreshToken ?? undefined,
-        scope: tokens.scopes.join(" "),
-      });
+      res.json({ access_token: tokens.accessToken, token_type: "Bearer", expires_in: tokens.expiresIn, refresh_token: tokens.refreshToken ?? undefined, scope: tokens.scopes.join(" ") });
       return;
     }
-
     if (grantType === "refresh_token") {
       const { refresh_token: refreshToken, client_id: clientId } = body;
-      if (!refreshToken || !clientId) {
-        res.status(400).json({ error: "invalid_request" });
-        return;
-      }
+      if (!refreshToken || !clientId) { res.status(400).json({ error: "invalid_request" }); return; }
       const result = deps.store.refresh(refreshToken, clientId);
-      if (!result.ok) {
-        res.status(400).json({ error: result.reason });
-        return;
-      }
-      res.json({
-        access_token: result.tokens.accessToken,
-        token_type: "Bearer",
-        expires_in: result.tokens.expiresIn,
-        refresh_token: result.tokens.refreshToken ?? undefined,
-        scope: result.tokens.scopes.join(" "),
-      });
+      if (!result.ok) { res.status(400).json({ error: result.reason }); return; }
+      res.json({ access_token: result.tokens.accessToken, token_type: "Bearer", expires_in: result.tokens.expiresIn, refresh_token: result.tokens.refreshToken ?? undefined, scope: result.tokens.scopes.join(" ") });
       return;
     }
-
     res.status(400).json({ error: "unsupported_grant_type" });
   });
-
-  // ---- Revocation (RFC 7009) ---------------------------------------------------
 
   router.post("/oauth/revoke", urlencoded({ extended: false }), (req, res) => {
     const body = req.body as { token?: string };
