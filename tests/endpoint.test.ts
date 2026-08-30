@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 import {
+  CHATGPT_CREATE_CONNECTOR_URL,
+  CHATGPT_DEVELOPER_MODE_URL,
+  CHATGPT_PLUGINS_URL,
   CLAUDE_CONNECTORS_URL,
+  CONNECTOR_SETTINGS_URL,
+  CREATE_CONNECTOR_URL,
   connectorAction,
   connectorNameFor,
   DEFAULT_CONNECTOR_NAME,
@@ -62,7 +67,15 @@ describe("connectorNameFor", () => {
   });
 
   it("points connector management at Claude Web", () => {
-    expect(CLAUDE_CONNECTORS_URL).toContain("claude.ai");
+    expect(CONNECTOR_SETTINGS_URL).toContain("claude.ai");
+    expect(CLAUDE_CONNECTORS_URL).toBe(CONNECTOR_SETTINGS_URL);
+    expect(CREATE_CONNECTOR_URL).toBe(CONNECTOR_SETTINGS_URL);
+  });
+
+  it("keeps legacy ChatGPT constants as aliases during migration", () => {
+    expect(CHATGPT_DEVELOPER_MODE_URL).toBe(CONNECTOR_SETTINGS_URL);
+    expect(CHATGPT_PLUGINS_URL).toBe(CONNECTOR_SETTINGS_URL);
+    expect(CHATGPT_CREATE_CONNECTOR_URL).toBe(CREATE_CONNECTOR_URL);
   });
 });
 
