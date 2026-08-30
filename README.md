@@ -174,7 +174,7 @@ src/
   workspace/  containment, sensitive-file policy, search, git
 skill/        Codex skill
 tests/        unit and integration tests
-docs/         architecture, protocol, security, migration, troubleshooting
+docs/         architecture, protocol, security, migration, troubleshooting, local-e2e
 ```
 
 ## Status
