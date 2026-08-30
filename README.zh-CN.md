@@ -145,7 +145,7 @@ c2c stop
 
 如果机器上已经存在旧的 `codex-with-chatgpt` App State，而新的 `codex-with-claude` 目录还不存在，C2C 会继续使用旧目录，避免 OAuth、Workspace ID、Endpoint、Session 和执行记录突然丢失。新安装默认使用 `codex-with-claude`。
 
-少量内部常量和机器可读 CLI 字段暂时保留历史 ChatGPT 名称，避免已有调用方突然失效。详见 [docs/migration.md](docs/migration.md)。
+少量内部常量和机器可读的 `chatgptRepair` doctor 字段（现以 `connectorRepair` 为准）暂时保留历史 ChatGPT 名称，避免已有调用方突然失效。详见 [docs/migration.md](docs/migration.md)。
 
 ## 开发
 

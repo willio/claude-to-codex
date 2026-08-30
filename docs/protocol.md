@@ -1,7 +1,7 @@
 # C2C Agent Protocol
 
-Control plane: Computer Use (tiny structured messages typed into the ChatGPT UI).
-Data plane: MCP (ChatGPT pulls files, diffs, search results itself).
+Control plane: The Claude conversation (tiny structured messages typed into Claude Web).
+Data plane: MCP (Claude pulls files, diffs, search results itself).
 
 Never mix the two: control messages carry state, never content.
 
@@ -13,13 +13,13 @@ INIT → PLAN → EXECUTING → EXECUTED → REVIEW → PLAN | DONE | BLOCKED | 
 
 | State | Sender | Meaning |
 | --- | --- | --- |
-| INIT | Codex | New task; asks ChatGPT to inspect + plan |
-| PLAN | ChatGPT | Executable plan for the next iteration |
+| INIT | Codex | New task; asks Claude to inspect + plan |
+| PLAN | Claude | Executable plan for the next iteration |
 | EXECUTING | Codex | (optional) execution in progress |
 | EXECUTED | Codex | Iteration finished; metadata only |
-| REVIEW | ChatGPT | (implicit) ChatGPT is inspecting via MCP |
-| DONE | ChatGPT | Success criteria met |
-| BLOCKED | ChatGPT | Cannot proceed; contains reason |
+| REVIEW | Claude | (implicit) Claude is inspecting via MCP |
+| DONE | Claude | Success criteria met |
+| BLOCKED | Claude | Cannot proceed; contains reason |
 | ERROR | either | Protocol/infrastructure failure |
 | HANDOFF | Codex | Continuation brief sent to a replacement conversation |
 
@@ -28,7 +28,7 @@ INIT → PLAN → EXECUTING → EXECUTED → REVIEW → PLAN | DONE | BLOCKED | 
 Every control message starts with `[C2C]` and key-value headers, then sections.
 Keep messages < 1 KB. No diffs, no logs, no file bodies.
 
-### INIT (Codex → ChatGPT)
+### INIT (Codex → Claude)
 
 ```
 [C2C]
@@ -40,11 +40,11 @@ GOAL:
 Implement dark mode.
 
 INSTRUCTION:
-Inspect the connected workspace through Codex with ChatGPT MCP.
+Inspect the connected workspace through Codex with Claude MCP.
 Create an implementation plan for Codex.
 ```
 
-### PLAN (ChatGPT → Codex)
+### PLAN (Claude → Codex)
 
 ```
 [C2C]
@@ -75,7 +75,7 @@ SUCCESS_CRITERIA:
 
 Plans must be finite, concrete, executable. Not 40-step epics.
 
-### EXECUTED (Codex → ChatGPT)
+### EXECUTED (Codex → Claude)
 
 ```
 [C2C]
@@ -97,9 +97,9 @@ Please independently inspect the workspace and current git diff through MCP.
 
 Before sending EXECUTED, Codex records the iteration:
 `c2c record --task c2c_f81a --iteration 1 --changed-files ... --tests ... --exit-status ok`
-so ChatGPT can read it via the `execution_summary` / `test_status` tools.
+so Claude can read it via the `execution_summary` / `test_status` tools.
 
-### DONE / BLOCKED (ChatGPT → Codex)
+### DONE / BLOCKED (Claude → Codex)
 
 ```
 [C2C]
@@ -124,7 +124,7 @@ NEEDS:
 ...
 ```
 
-### HANDOFF (Codex → new ChatGPT conversation)
+### HANDOFF (Codex → new Claude conversation)
 
 One workspace keeps one long-lived C2C conversation (`c2c session get/set`).
 Codex switches to a new chat only when the user asks for it or the old chat has
@@ -171,7 +171,7 @@ Codex owns execution.
 You own high-level reasoning, planning and review.
 
 You have access to the current local workspace through the
-"Codex with ChatGPT" MCP connector.
+"Codex with Claude" MCP connector.
 
 Rules:
 

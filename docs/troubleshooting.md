@@ -15,24 +15,26 @@ can (restarts the bridge, restarts the tunnel) without asking.
 `c2c start` (or let doctor do it). Bridge logs:
 `c2c logs`, or verbose: `c2c logs --verbose`.
 
-### Everything was quit and ChatGPT can no longer connect
+### Everything was quit and Claude can no longer connect
 Quitting Codex / the terminal stops the public address. The next `c2c doctor`
-starts a new address and sets `chatgptRepair.needed`. The Skill should tell the
-user that the old address expired, then **Delete** THIS workspace's
-connector (`chatgptRepair.connectorName`) and create it again with the new
-address (never click Reconnect — the old URL is dead). Other workspaces keep
-their own connectors so two projects can stay connected at once.
+starts a new address and sets `connectorRepair.needed`. The Skill should tell
+the user that the old address expired, then **Delete** THIS workspace's
+connector in **Claude → Customize → Connectors**
+(`connectorRepair.connectorName`) and create it again with the new address
+(never click Reconnect — the old URL is dead). Other workspaces keep their own
+connectors so two projects can stay connected at once.
 
-Fixed ChatGPT pages for first-time setup and later repair (do not hunt the UI):
+Fixed Claude page for first-time setup and later repair (do not hunt the UI):
 
-- Developer mode: https://chatgpt.com/#settings/Security
-- Plugins hub (manage existing connectors): https://chatgpt.com/plugins
-- Add a connector:
-  https://chatgpt.com/plugins#settings/Connectors?create-connector=true&redirectAfter=%2Fplugins
+- Connectors settings: https://claude.ai/settings/connectors
 
-### Tunnel URL unreachable / ChatGPT says the connector is broken
+For older automations, `doctor --json` also still emits the legacy
+`chatgptRepair` key as an alias of `connectorRepair`; new integrations should
+read `connectorRepair`.
+
+### Tunnel URL unreachable / Claude says the connector is broken
 Same as above: `c2c doctor`, then Delete + recreate THIS workspace's
-connector if `chatgptRepair.needed`. Fresh pairing code: `c2c pair`.
+connector if `connectorRepair.needed`. Fresh pairing code: `c2c pair`.
 If this workspace uses a stable hostname, doctor sets `namedRepair` instead —
 re-login to Cloudflare (`c2c tunnel login`) and doctor again. Do not Delete
 the connector; the address did not change.
@@ -53,11 +55,12 @@ c2c pair
 
 generates a fresh one (older codes become invalid immediately).
 
-### ChatGPT gets 401 on every tool call
+### Claude gets 401 on every tool call
 The access token expired and refresh failed (e.g. after `c2c unpair` or a
 long offline period). Delete THIS workspace's connector if the address also
-changed; otherwise run Authorize again in ChatGPT and enter a fresh pairing
-code. Never use Reconnect when the public address has been replaced.
+changed; otherwise re-authorize in Claude (Add custom connector again) and
+enter a fresh pairing code. Never use Reconnect when the public address has
+been replaced.
 
 ### cloudflared is not installed
 macOS: `brew install cloudflared`
@@ -66,10 +69,11 @@ Linux: see Cloudflare's package instructions.
 The Skill installs this automatically during setup.
 
 ### Every new Codex chat “repairs” the connection / cannot write logs
-The C2C state directory lives outside the project (macOS:
-`~/Library/Application Support/codex-with-chatgpt`; Windows:
-`%LOCALAPPDATA%\codex-with-chatgpt`). Codex's default sandbox cannot write
-there, so each new chat looks like a health-check failure.
+The C2C state directory lives outside the project. New installations use
+`~/Library/Application Support/codex-with-claude` (Windows:
+`%LOCALAPPDATA%\codex-with-claude`); existing upstream installations may still
+use the legacy `codex-with-chatgpt` directory. Codex's default sandbox cannot
+write there, so each new chat looks like a health-check failure.
 
 `c2c setup`, `c2c doctor` and `c2c sandbox-allow` add that directory to
 `[sandbox_workspace_write].writable_roots` in `~/.codex/config.toml`
@@ -83,7 +87,7 @@ automatically.
 
 ### Reading a file returns ACCESS_DENIED_SENSITIVE_FILE
 Working as intended: `.env`, keys, credentials and anything matched by
-`.c2cignore` are never readable through ChatGPT. `.env.example` is allowed.
+`.c2cignore` are never readable through Claude. `.env.example` is allowed.
 
 ### Completely stuck
 ```
