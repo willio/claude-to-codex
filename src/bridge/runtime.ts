@@ -66,11 +66,23 @@ export async function probeBridge(
   }
 }
 
+/**
+ * Find a live bridge for a workspace via its runtime state file.
+ *
+ * The loopback health probe occasionally times out even against a healthy,
+ * idle bridge (observed on macOS). Acting on a single missed probe is
+ * dangerous: `ensureBridge` would spawn a duplicate daemon that hijacks the
+ * runtime state while the original keeps the tunnel, and commands like
+ * `unpair` would silently do nothing. Retry before concluding it is down.
+ */
 export async function findLiveBridge(workspaceId: string): Promise<RuntimeState | null> {
   const state = readRuntimeState(workspaceId);
   if (!state) return null;
-  const health = await probeBridge(state.port);
-  if (health && health.workspaceId === workspaceId) return state;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const health = await probeBridge(state.port);
+    if (health && health.workspaceId === workspaceId) return state;
+    if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 200));
+  }
   return null;
 }
 
