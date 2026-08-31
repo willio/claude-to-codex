@@ -119,6 +119,14 @@ function loadBinding(stateDir: string, workspaceId: string): LocalSessionBinding
   }
 }
 
+function clearBinding(stateDir: string, workspaceKey: string): void {
+  try {
+    fs.rmSync(bindingFile(stateDir, workspaceKey), { force: true });
+  } catch {
+    // ignore
+  }
+}
+
 function saveBinding(stateDir: string, binding: LocalSessionBinding, workspaceKey: string): void {
   const file = bindingFile(stateDir, workspaceKey);
   ensureDir(path.dirname(file));
@@ -201,4 +209,29 @@ export async function heartbeatWorkspaceSession(
   } catch {
     return false;
   }
+}
+
+
+/** End the bound Codex session for a workspace and remove the local binding file. */
+export async function endWorkspaceSession(
+  workspaceRoot: string,
+  opts: { stateDir?: string } = {}
+): Promise<{ ended: boolean; sessionId?: string }> {
+  const stateDir = opts.stateDir ?? getStateDir();
+  const workspaceKey = new Workspace(workspaceRoot).id;
+  const binding = loadBinding(stateDir, workspaceKey);
+  if (!binding) return { ended: false };
+
+  const runtime = installationRuntime(stateDir);
+  if (runtime) {
+    try {
+      await adminFetch(runtime, "POST", "/admin/session/end", 10_000, {
+        sessionId: binding.sessionId,
+      });
+    } catch {
+      // session may already be expired or cleared server-side
+    }
+  }
+  clearBinding(stateDir, workspaceKey);
+  return { ended: true, sessionId: binding.sessionId };
 }

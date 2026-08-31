@@ -1327,11 +1327,23 @@ program
   .argument("[path]")
   .option("-w, --workspace <path>")
   .option("--name <name>", "display name for the workspace")
+  .option("--end", "end the active Codex session for this workspace")
   .option("--json", "machine-readable output", false)
-  .action(async (pathArg: string | undefined, opts: { workspace?: string; name?: string; json: boolean }) => {
+  .action(async (pathArg: string | undefined, opts: { workspace?: string; name?: string; end?: boolean; json: boolean }) => {
     try {
-      const { ensureBroker, ensureWorkspaceSession } = await import("../broker/daemon.js");
       const root = resolveWorkspace(pathArg ?? opts.workspace);
+      if (opts.end) {
+        const { endWorkspaceSession } = await import("../broker/daemon.js");
+        const result = await endWorkspaceSession(root);
+        if (opts.json) {
+          say(JSON.stringify({ ok: true, ...result }));
+          return;
+        }
+        if (result.ended) check("Codex session ended for this workspace");
+        else say("No active Codex session binding for this workspace.");
+        return;
+      }
+      const { ensureBroker, ensureWorkspaceSession } = await import("../broker/daemon.js");
       const runtime = await ensureBroker();
       const session = await ensureWorkspaceSession(runtime, root, { displayName: opts.name, pid: process.pid });
       if (opts.json) {
