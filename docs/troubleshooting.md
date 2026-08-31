@@ -11,7 +11,7 @@ can (restarts the bridge, restarts the tunnel) without asking.
 
 ## Common situations
 
-### "Bridge 未运行"
+### "Bridge not running"
 `c2c start` (or let doctor do it). Bridge logs:
 `c2c logs`, or verbose: `c2c logs --verbose`.
 
@@ -46,7 +46,7 @@ login, then keeps `c2c-<project>.your-domain.com`. To stay on the temporary
 address, say you do not have a domain. Switching later: tell Codex you want
 the stable hostname; it runs `c2c tunnel choose --mode named --zone <domain>`.
 
-### "配对码无效/过期"
+### "Pairing code invalid/expired"
 Pairing codes are one-time and expire after ~5 minutes:
 
 ```
