@@ -6,6 +6,7 @@ import { ensureDir, getStateDir } from "../config/paths.js";
 import { adminFetch } from "../process/daemon.js";
 import { findLiveBridge, probeBridge, readRuntimeState, type RuntimeState } from "../bridge/runtime.js";
 import { Workspace } from "../workspace/manager.js";
+import { AuthStore } from "../auth/store.js";
 import { loadOrCreateInstallation } from "../workspaces/installation.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -119,6 +120,14 @@ function loadBinding(stateDir: string, workspaceId: string): LocalSessionBinding
   }
 }
 
+function clearBinding(stateDir: string, workspaceKey: string): void {
+  try {
+    fs.rmSync(bindingFile(stateDir, workspaceKey), { force: true });
+  } catch {
+    // ignore
+  }
+}
+
 function saveBinding(stateDir: string, binding: LocalSessionBinding, workspaceKey: string): void {
   const file = bindingFile(stateDir, workspaceKey);
   ensureDir(path.dirname(file));
@@ -201,4 +210,53 @@ export async function heartbeatWorkspaceSession(
   } catch {
     return false;
   }
+}
+
+
+/** End the bound Codex session for a workspace and remove the local binding file. */
+export async function endWorkspaceSession(
+  workspaceRoot: string,
+  opts: { stateDir?: string } = {}
+): Promise<{ ended: boolean; sessionId?: string }> {
+  const stateDir = opts.stateDir ?? getStateDir();
+  const workspaceKey = new Workspace(workspaceRoot).id;
+  const binding = loadBinding(stateDir, workspaceKey);
+  if (!binding) return { ended: false };
+
+  const runtime = installationRuntime(stateDir);
+  if (runtime) {
+    try {
+      await adminFetch(runtime, "POST", "/admin/session/end", 10_000, {
+        sessionId: binding.sessionId,
+      });
+    } catch {
+      // session may already be expired or cleared server-side
+    }
+  }
+  clearBinding(stateDir, workspaceKey);
+  return { ended: true, sessionId: binding.sessionId };
+}
+
+
+/** Revoke every OAuth token for this installation (live broker or persisted store). */
+export async function revokeInstallationAuth(opts: { stateDir?: string } = {}): Promise<number> {
+  const stateDir = opts.stateDir ?? getStateDir();
+  const installation = loadOrCreateInstallation(stateDir);
+  const runtime = installationRuntime(stateDir);
+  if (runtime) {
+    const result = await adminFetch<{ revoked: number }>(runtime, "POST", "/admin/revoke-all");
+    return result.revoked ?? 0;
+  }
+  return new AuthStore(installation.installationId).revokeAll();
+}
+
+export interface PairingResponse {
+  code: string;
+  expiresAt: number;
+}
+
+/** Mint a one-time pairing code for the installation connector. */
+export async function createInstallationPairing(opts: { stateDir?: string } = {}): Promise<PairingResponse> {
+  const runtime = await ensureBroker(opts);
+  return adminFetch<PairingResponse>(runtime, "POST", "/admin/pairing");
 }

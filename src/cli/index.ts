@@ -607,13 +607,23 @@ program
 
 program
   .command("pair")
-  .description("Generate a fresh pairing code")
-  .option("-w, --workspace <path>")
+  .description("Generate a fresh pairing code for the C2C installation connector")
+  .option("-w, --workspace <path>", "legacy: per-project bridge only")
   .option("--json", "machine-readable output", false)
   .action(async (opts: { workspace?: string; json: boolean }) => {
     try {
-      const { runtime } = await ensureBridge(resolveWorkspace(opts.workspace));
-      const pairing = await adminFetch<PairingResponse>(runtime, "POST", "/admin/pairing");
+      if (opts.workspace) {
+        const { runtime } = await ensureBridge(resolveWorkspace(opts.workspace));
+        const pairing = await adminFetch<PairingResponse>(runtime, "POST", "/admin/pairing");
+        if (opts.json) say(JSON.stringify({ ok: true, pairingCode: pairing.code, expiresAt: pairing.expiresAt }));
+        else {
+          say(`Pairing code: ${pairing.code}`);
+          say(`(valid ${Math.round((pairing.expiresAt - Date.now()) / 60000)} min, single use)`);
+        }
+        return;
+      }
+      const { createInstallationPairing } = await import("../broker/daemon.js");
+      const pairing = await createInstallationPairing();
       if (opts.json) say(JSON.stringify({ ok: true, pairingCode: pairing.code, expiresAt: pairing.expiresAt }));
       else {
         say(`Pairing code: ${pairing.code}`);
@@ -626,21 +636,33 @@ program
 
 program
   .command("unpair")
-  .description("Revoke Claude's access to this workspace immediately")
-  .option("-w, --workspace <path>")
-  .action(async (opts: { workspace?: string }) => {
-    const root = resolveWorkspace(opts.workspace);
-    const workspace = new Workspace(root);
-    const runtime = await findLiveBridge(workspace.id);
-    let revoked = 0;
-    if (runtime) {
-      const result = await adminFetch<{ revoked: number }>(runtime, "POST", "/admin/revoke-all");
-      revoked = result.revoked ?? 0;
-    } else {
-      // bridge not running: revoke directly in the persisted store
-      revoked = new AuthStore(workspace.id).revokeAll();
+  .description("Revoke Claude's access to this C2C installation immediately")
+  .option("-w, --workspace <path>", "legacy: per-project bridge only")
+  .option("--json", "machine-readable output", false)
+  .action(async (opts: { workspace?: string; json: boolean }) => {
+    try {
+      if (opts.workspace) {
+        const root = resolveWorkspace(opts.workspace);
+        const workspace = new Workspace(root);
+        const runtime = await findLiveBridge(workspace.id);
+        let revoked = 0;
+        if (runtime) {
+          const result = await adminFetch<{ revoked: number }>(runtime, "POST", "/admin/revoke-all");
+          revoked = result.revoked ?? 0;
+        } else {
+          revoked = new AuthStore(workspace.id).revokeAll();
+        }
+        if (opts.json) say(JSON.stringify({ ok: true, revoked, legacy: true }));
+        else check(`Revoked Claude's access to this workspace (${revoked} tokens)`);
+        return;
+      }
+      const { revokeInstallationAuth } = await import("../broker/daemon.js");
+      const revoked = await revokeInstallationAuth();
+      if (opts.json) say(JSON.stringify({ ok: true, revoked }));
+      else check(`Revoked Claude's access to this installation (${revoked} tokens)`);
+    } catch (error) {
+      handleCliError(error, opts.json);
     }
-    check(`Revoked Claude's access to this workspace (${revoked} tokens)`);
   });
 
 // ---------------------------------------------------------------- logs / workspace / record
@@ -1312,6 +1334,32 @@ brokerCmd
   });
 
 brokerCmd
+  .command("migrate-auth")
+  .description("Upgrade legacy per-workspace OAuth tokens to installation-level auth")
+  .option("--json", "machine-readable output", false)
+  .action(async (opts: { json: boolean }) => {
+    try {
+      const { upgradeLegacyAuth } = await import("../auth/migration.js");
+      const result = upgradeLegacyAuth(getStateDir());
+      if (opts.json) {
+        say(JSON.stringify({ ok: true, ...result }));
+        return;
+      }
+      if (!result.upgraded) {
+        if (result.reason === "no_legacy_files") say("No legacy per-workspace OAuth files to migrate.");
+        else say("Legacy OAuth state is already migrated for the current installation.");
+        return;
+      }
+      check(
+        `Migrated ${result.tokensMigrated} token(s) from ${result.sourceFiles.length} legacy file(s) to ${result.installationId}`
+      );
+      say("Legacy auth files were kept for rollback.");
+    } catch (error) {
+      handleCliError(error, opts.json);
+    }
+  });
+
+brokerCmd
   .command("stop")
   .description("Stop the installation broker")
   .action(async () => {
@@ -1327,11 +1375,23 @@ program
   .argument("[path]")
   .option("-w, --workspace <path>")
   .option("--name <name>", "display name for the workspace")
+  .option("--end", "end the active Codex session for this workspace")
   .option("--json", "machine-readable output", false)
-  .action(async (pathArg: string | undefined, opts: { workspace?: string; name?: string; json: boolean }) => {
+  .action(async (pathArg: string | undefined, opts: { workspace?: string; name?: string; end?: boolean; json: boolean }) => {
     try {
-      const { ensureBroker, ensureWorkspaceSession } = await import("../broker/daemon.js");
       const root = resolveWorkspace(pathArg ?? opts.workspace);
+      if (opts.end) {
+        const { endWorkspaceSession } = await import("../broker/daemon.js");
+        const result = await endWorkspaceSession(root);
+        if (opts.json) {
+          say(JSON.stringify({ ok: true, ...result }));
+          return;
+        }
+        if (result.ended) check("Codex session ended for this workspace");
+        else say("No active Codex session binding for this workspace.");
+        return;
+      }
+      const { ensureBroker, ensureWorkspaceSession } = await import("../broker/daemon.js");
       const runtime = await ensureBroker();
       const session = await ensureWorkspaceSession(runtime, root, { displayName: opts.name, pid: process.pid });
       if (opts.json) {

@@ -36,7 +36,8 @@ When the user starts a session in a project, register it and learn its identity:
 1. Run `c2c use --json` (registers the current directory, starts a Codex session binding, and prints the opaque `workspaceId`).
 2. Run `c2c broker status --json`. Do not begin the loop until the broker and its public endpoint are healthy.
 3. Remember this workspace `workspaceId` — include it whenever you tell the user what to ask Claude, and use it in INIT instructions (Claude scopes every tool call with it).
-4. Route repairs through `c2c doctor --json` (installation-aware) or `c2c broker status`; per-project bridges (`c2c start`) are legacy compatibility only.
+4. When a Codex session ends, run `c2c use --end --json` to clear the local session binding.
+5. Route repairs through `c2c doctor --json` (installation-aware) or `c2c broker status`; per-project bridges (`c2c start`) are legacy compatibility only.
 
 ## Planning loop
 
