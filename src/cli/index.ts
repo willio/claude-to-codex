@@ -1101,6 +1101,47 @@ brokerCmd
   });
 
 brokerCmd
+  .command("tunnel")
+  .description("Attach a stable named Cloudflare Tunnel hostname to the installation broker")
+  .requiredOption("--zone <domain>", "Cloudflare zone that is in your account, e.g. example.com")
+  .option("--hostname <hostname>", "full hostname to route (default: c2c-installation.<zone>)")
+  .option("--json", "machine-readable output", false)
+  .action(async (opts: { zone: string; hostname?: string; json: boolean }) => {
+    try {
+      const { provisionNamedTunnel } = await import("../tunnel/named-provision.js");
+      const result = await provisionNamedTunnel({
+        workspaceId: "installation",
+        workspaceName: "installation",
+        zone: opts.zone,
+        hostname: opts.hostname,
+      });
+      if (result.fallback) {
+        cross(`Named tunnel provisioning failed: ${result.error ?? "unknown error"}`);
+        say("Falling back to the Quick Tunnel for now. Fix the cause and retry.");
+        process.exitCode = 1;
+        return;
+      }
+      // Restart the broker so it picks up the named-tunnel binding.
+      const { stopBroker, ensureBroker, ensureBrokerTunnel } = await import("../broker/daemon.js");
+      await stopBroker();
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const runtime = await ensureBroker();
+      const url = await ensureBrokerTunnel(runtime);
+      const mcpUrl = `${url}/mcp`;
+      if (opts.json) {
+        say(JSON.stringify({ ok: true, hostname: result.state.hostname, mcpUrl }));
+        return;
+      }
+      check(`Stable hostname: ${result.state.hostname}`);
+      check(`Connector URL: ${mcpUrl}`);
+      say("");
+      say("This URL survives restarts and reboots. Update the connector in Claude to this URL.");
+    } catch (error) {
+      handleCliError(error, opts.json);
+    }
+  });
+
+brokerCmd
   .command("pair")
   .description("Generate a one-time pairing code for the installation connector")
   .option("--json", "machine-readable output", false)
