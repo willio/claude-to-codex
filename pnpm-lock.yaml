@@ -9,7 +9,7 @@ importers:
   .:
     dependencies:
       '@modelcontextprotocol/sdk':
-        specifier: latest
+        specifier: 1.30.0
         version: 1.30.0(zod@3.25.76)
       commander:
         specifier: ^14.0.0

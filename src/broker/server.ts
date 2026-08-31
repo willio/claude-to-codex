@@ -144,13 +144,19 @@ export async function startBroker(opts: BrokerOptions = {}): Promise<Broker> {
 
   // ---- Health (public but minimal) ---------------------------------------
 
-  app.get("/health", (_req, res) => {
-    res.json({
+  app.get("/health", (req, res) => {
+    const remote = req.socket.remoteAddress ?? "";
+    const isLoopback = remote === "127.0.0.1" || remote === "::1" || remote === "::ffff:127.0.0.1";
+    const viaProxy = Boolean(req.headers["cf-connecting-ip"] || req.headers["x-forwarded-for"]);
+    const payload: Record<string, string> = {
       service: SERVICE_NAME,
       version: VERSION,
-      workspaceId: installation.installationId,
       status: "ok",
-    });
+    };
+    // Installation identity is only for local loopback probes; the tunneled
+    // /health surface stays minimal.
+    if (isLoopback && !viaProxy) payload.workspaceId = installation.installationId;
+    res.json(payload);
   });
 
   // ---- OAuth + discovery (installation-bound) ------------------------------

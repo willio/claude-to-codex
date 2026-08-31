@@ -16,7 +16,7 @@
 
 - Claude：推理、规划、检查、Review。
 - Codex：编辑文件、Shell、git、测试、修复和提交。
-- C2C Bridge：只读地提供工作区和 Codex 已记录的执行信息。
+- C2C Broker：一条安装级连接器，通过不透明的工作区 ID 只读地提供多个 Codex 项目。
 
 Claude 不会获得写文件、删除文件、执行任意命令或提交代码的 MCP 工具。
 
@@ -46,7 +46,7 @@ corepack pnpm build
 c2c setup
 ```
 
-C2C 会启动本地 Bridge、建立公网 HTTPS Tunnel，并返回 MCP 地址和一次性配对码。
+C2C 会启动安装级 Broker、建立公网 HTTPS Tunnel、注册当前工作区，并在尚未授权时返回 MCP 地址和一次性配对码。
 
 接下来在 Claude Web：
 
@@ -54,7 +54,7 @@ C2C 会启动本地 Bridge、建立公网 HTTPS Tunnel，并返回 MCP 地址和
 2. 用 C2C 提供的 MCP 地址添加 Custom Connector。
 3. 完成 OAuth 授权。
 4. 在 C2C 授权页面输入一次性配对码。
-5. 启用 Connector，然后让 Claude 调用 `workspace_info`，确认连接的是正确工作区。
+5. 启用 Connector，然后让 Claude 调用 `list_workspaces`，再使用不透明的工作区 ID 调用 `workspace_info`。
 
 在 Claude 中添加 Connector 是明确的用户操作。Codex Skill 会准备和诊断本地端，但不会假装可以自动操作 Claude 的 Connector UI。
 
@@ -70,8 +70,9 @@ INIT -> PLAN -> EXECUTED -> REVIEW -> DONE
 
 Claude 通过 MCP 自己读取源码、git diff、git 状态和 Codex 已记录的执行结果，不需要 Codex 在对话中粘贴大量文件内容或日志。
 
-目前提供 8 个只读 MCP 工具：
+目前提供 9 个只读 MCP 工具：
 
+- `list_workspaces`
 - `workspace_info`
 - `list_directory`
 - `read_file`
@@ -86,39 +87,23 @@ Claude 通过 MCP 自己读取源码、git diff、git 状态和 Codex 已记录�
 ## 架构
 
 ```text
-             +---------------------------+
-             |       Claude Web          |
-             |    推理 / 规划 / 审查     |
-             +-------------+-------------+
-                           |
-                    Remote MCP + OAuth
-                           |
-                           v
-             +---------------------------+
-             |        C2C Bridge         |
-             |         只读 MCP          |
-             | OAuth + 一次性配对码      |
-             |   Cloudflare Tunnel       |
-             +-------------+-------------+
-                           |
-                          只读
-                           v
-             +---------------------------+
-             |         本地工作区        |
-             +-------------^-------------+
-                           |
-                    编辑 / git / shell
-                           |
-             +-------------+-------------+
-             |       Codex Harness       |
-             |     执行 / 测试 / 修复    |
-             +---------------------------+
+Claude Web（规划 / 审查）
+    │  OAuth 一次 · 一条连接器
+    ▼
+C2C Broker ── 稳定 /mcp 端点
+    ├── 项目 A  ◄── Codex 会话
+    ├── 项目 B  ◄── Codex 会话
+    └── 项目 C
+              ▲
+              │ 编辑 / shell / git / 测试
+              │
+        Codex（执行）
 ```
 
 ## 安全模型
 
 - **从构造上只读**：MCP 服务端没有写文件、删除、Shell、commit 或任意执行工具。
-- **工作区隔离**：授权绑定单一工作区；路径校验阻止 `../`、绝对路径和 symlink 逃逸。
+- **安装级授权**：Claude 授权一个 C2C 安装；工作区通过本地注册的不透明 ID 解析；路径校验阻止 `../`、绝对路径和 symlink 逃逸。
 - **敏感文件策略**：`.env*`、密钥、SSH 和凭据默认拒绝；`.env.example` 可读取，`.c2cignore` 可以继续追加排除规则。
 - **公网地址不等于权限**：MCP Endpoint 强制 OAuth；知道 Tunnel URL 本身无法读取工作区。
 - **一次性配对**：浏览器只接触短期配对码，不接触本地长期凭据。
@@ -130,16 +115,18 @@ Claude 通过 MCP 自己读取源码、git diff、git 状态和 Codex 已记录�
 
 ```bash
 c2c setup
-c2c start
-c2c status
+c2c use
+c2c broker start
+c2c broker status
 c2c doctor
 c2c pair
 c2c unpair
-c2c logs
+c2c start
+c2c status
 c2c stop
 ```
 
-`c2c doctor` 用于检查本地 Bridge、Tunnel、Codex Sandbox 配置和 Connector Endpoint。如果 Quick Tunnel 地址改变，它会定位当前工作区需要重新添加的 Claude Connector。
+`c2c doctor` 检查安装、Broker、公网端点、工作区注册和授权状态。`c2c use` 在切换项目时注册工作区并绑定 Codex 会话，通常无需新的 Claude 连接器或 OAuth。
 
 ## 兼容策略
 

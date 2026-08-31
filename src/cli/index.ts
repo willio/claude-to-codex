@@ -603,7 +603,7 @@ program
     if (!allOk) process.exitCode = 1;
   });
 
-// ---------------------------------------------------------------- pair / unpair// ---------------------------------------------------------------- pair / unpair
+// ---------------------------------------------------------------- pair / unpair
 
 program
   .command("pair")
@@ -1110,14 +1110,15 @@ program
         fs.cpSync(path.join(appRoot, entry), path.join(homeApp, entry), { recursive: true });
       }
       fs.copyFileSync(path.join(appRoot, "package.json"), path.join(homeApp, "package.json"));
-      const npmInstall = spawnSync("npm", ["install", "--omit=dev", "--no-audit", "--no-fund"], {
+      fs.copyFileSync(path.join(appRoot, "pnpm-lock.yaml"), path.join(homeApp, "pnpm-lock.yaml"));
+      const pnpmInstall = spawnSync("pnpm", ["install", "--prod", "--frozen-lockfile"], {
         cwd: homeApp,
         encoding: "utf8",
         timeout: 300_000,
       });
-      if (npmInstall.status !== 0 || !fs.existsSync(path.join(homeApp, "node_modules"))) {
+      if (pnpmInstall.status !== 0 || !fs.existsSync(path.join(homeApp, "node_modules"))) {
         throw new Error(
-          `Dependency install failed in ${homeApp}: ${npmInstall.stderr || npmInstall.stdout || "unknown error"}`
+          `Dependency install failed in ${homeApp}: ${pnpmInstall.stderr || pnpmInstall.stdout || "unknown error"}`
         );
       }
 
