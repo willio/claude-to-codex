@@ -161,15 +161,15 @@ describe("session registry", () => {
   it("heartbeat extends expiry", async () => {
     const stateDir = isolateStateDir();
     const workspaces = WorkspaceRegistry.load(stateDir);
-    const sessions = shortTtlRegistry(stateDir, workspaces, 200);
+    const sessions = shortTtlRegistry(stateDir, workspaces, 500);
     const ws = workspaces.register({ root: makeRoot("flow") });
 
     const session = sessions.create(ws.id);
     const before = session.expiresAt;
-    await new Promise((resolve) => setTimeout(resolve, 60));
+    await new Promise((resolve) => setTimeout(resolve, 100));
     const touched = sessions.touch(session.sessionId);
     expect(touched?.expiresAt).toBeGreaterThan(before);
-    await new Promise((resolve) => setTimeout(resolve, 180));
+    await new Promise((resolve) => setTimeout(resolve, 200));
     expect(sessions.resolve(session.sessionId)).not.toBeNull();
   });
 

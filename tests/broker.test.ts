@@ -276,3 +276,36 @@ describe("broker admin API over HTTP", () => {
     expect(broker.registry.get(registration.id)).toBeNull();
   });
 });
+
+describe("broker named tunnel binding", () => {
+  it("prefers the installation named-tunnel binding over a quick tunnel", async () => {
+    const soloStateDir = makeTmpDir("broker-named");
+    const { writeTunnelState } = await import("../src/tunnel/state.js");
+    writeTunnelState({
+      workspaceId: "installation",
+      preference: "named",
+      askedAt: new Date().toISOString(),
+      provider: "cloudflare-named",
+      tunnelName: "c2c-installation",
+      tunnelId: "00000000-0000-0000-0000-000000000000",
+      hostname: "c2c.example.com",
+      zone: "example.com",
+      configuredAt: new Date().toISOString(),
+    });
+    const soloRoot = makeTmpDir("broker-named-ws");
+    write(soloRoot, "hello.txt", "hello");
+    const solo = await startBroker({
+      stateDir: soloStateDir,
+      port: 0,
+      persistRuntime: false,
+      authStoreFile: path.join(makeTmpDir("broker-named-auth"), "store.json"),
+    });
+    try {
+      expect(solo.tunnel.name).toBe("cloudflare-named");
+    } finally {
+      await solo.close();
+      cleanup(soloStateDir);
+      cleanup(soloRoot);
+    }
+  });
+});
