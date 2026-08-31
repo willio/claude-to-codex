@@ -6,6 +6,7 @@ import { ensureDir, getStateDir } from "../config/paths.js";
 import { adminFetch } from "../process/daemon.js";
 import { findLiveBridge, probeBridge, readRuntimeState, type RuntimeState } from "../bridge/runtime.js";
 import { Workspace } from "../workspace/manager.js";
+import { AuthStore } from "../auth/store.js";
 import { loadOrCreateInstallation } from "../workspaces/installation.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -234,4 +235,28 @@ export async function endWorkspaceSession(
   }
   clearBinding(stateDir, workspaceKey);
   return { ended: true, sessionId: binding.sessionId };
+}
+
+
+/** Revoke every OAuth token for this installation (live broker or persisted store). */
+export async function revokeInstallationAuth(opts: { stateDir?: string } = {}): Promise<number> {
+  const stateDir = opts.stateDir ?? getStateDir();
+  const installation = loadOrCreateInstallation(stateDir);
+  const runtime = installationRuntime(stateDir);
+  if (runtime) {
+    const result = await adminFetch<{ revoked: number }>(runtime, "POST", "/admin/revoke-all");
+    return result.revoked ?? 0;
+  }
+  return new AuthStore(installation.installationId).revokeAll();
+}
+
+export interface PairingResponse {
+  code: string;
+  expiresAt: number;
+}
+
+/** Mint a one-time pairing code for the installation connector. */
+export async function createInstallationPairing(opts: { stateDir?: string } = {}): Promise<PairingResponse> {
+  const runtime = await ensureBroker(opts);
+  return adminFetch<PairingResponse>(runtime, "POST", "/admin/pairing");
 }

@@ -43,7 +43,7 @@ export interface TokenRecord {
   revoked: boolean;
 }
 
-interface PersistedAuthState {
+export interface PersistedAuthState {
   clients: ClientRegistration[];
   tokens: TokenRecord[];
 }
