@@ -208,9 +208,9 @@ program
         say(JSON.stringify({ ok: true, port: runtime.port, workspaceId: info.workspaceId, mcpUrl, connectorName }));
         return;
       }
-      check(`当前项目已识别（${info.workspaceName}）`);
-      check("Workspace Bridge 已启动");
-      if (mcpUrl) check("安全连接已建立");
+      check(`Workspace detected: ${info.workspaceName}`);
+      check("Bridge started");
+      if (mcpUrl) check("Secure connection established");
     } catch (error) {
       handleCliError(error, opts.json);
     }
@@ -230,7 +230,7 @@ program
       if (!opts.json) {
         say(PRODUCT_NAME);
         say("");
-        say("正在连接 Claude…");
+        say("Connecting to Claude…");
         say("");
       }
       const sandbox = trySandboxAllow();
@@ -272,14 +272,14 @@ program
         );
         return;
       }
-      check(`当前项目已识别（${info.workspaceName}）`);
-      check("Workspace Bridge 已启动");
-      if (mcpUrl) check("安全连接已建立");
+      check(`Workspace detected: ${info.workspaceName}`);
+      check("Bridge started");
+      if (mcpUrl) check("Secure connection established");
       say("");
-      say(`连接地址：${mcpUrl ?? `http://127.0.0.1:${runtime.port}/mcp`}`);
-      say(`配对码：${pairingResult.code}（${Math.round((pairingResult.expiresAt - Date.now()) / 60000)} 分钟内有效）`);
+      say(`Connector URL: ${mcpUrl ?? `http://127.0.0.1:${runtime.port}/mcp`}`);
+      say(`Pairing code: ${pairingResult.code} (valid ${Math.round((pairingResult.expiresAt - Date.now()) / 60000)} min)`);
       say("");
-      say("下一步：在 Claude 的 Customize > Connectors 中选择 Add custom connector 并填入以上地址（OAuth），在授权页输入配对码。");
+      say("Next: in Claude, Customize > Connectors > Add custom connector, paste the URL above, then enter the pairing code.");
     } catch (error) {
       handleCliError(error, opts.json);
     }
@@ -293,8 +293,8 @@ program
   .option("-w, --workspace <path>")
   .action(async (opts: { workspace?: string }) => {
     const stopped = await stopBridge(resolveWorkspace(opts.workspace));
-    if (stopped) check("Bridge 已停止");
-    else say("没有正在运行的 Bridge。");
+    if (stopped) check("Bridge stopped");
+    else say("No bridge running.");
   });
 
 program
@@ -308,8 +308,8 @@ program
     await new Promise((resolve) => setTimeout(resolve, 500));
     try {
       const { info, mcpUrl } = await ensureBridgeAndTunnel(root, { tunnel: opts.tunnel });
-      check(`Bridge 已重启（${info.workspaceName}）`);
-      if (mcpUrl) check(`安全连接已建立`);
+      check(`Bridge restarted (${info.workspaceName})`);
+      if (mcpUrl) check("Secure connection established");
     } catch (error) {
       handleCliError(error, false);
     }
@@ -328,7 +328,7 @@ program
     const runtime = await findLiveBridge(workspace.id);
     if (!runtime) {
       if (opts.json) say(JSON.stringify({ ok: false, running: false }));
-      else say("Bridge 未运行。使用 `c2c start` 启动。");
+      else say("Bridge not running. Start it with `c2c start`.");
       return;
     }
     const info = await adminFetch<AdminInfo>(runtime, "GET", "/admin/info");
@@ -338,11 +338,11 @@ program
     }
     say(PRODUCT_NAME);
     say("");
-    check(`Workspace：${info.workspaceName}`);
-    check(`Bridge：运行中（端口 ${info.port}）`);
-    if (info.tunnel.running && info.tunnel.url) check(`安全连接：${info.tunnel.url}/mcp`);
-    else say("· 安全连接：未启用（本地模式）");
-    say(`· 已授权连接：${info.tokenCount > 0 ? "是" : "否"}`);
+    check(`Workspace: ${info.workspaceName}`);
+    check(`Bridge: running on port ${info.port}`);
+    if (info.tunnel.running && info.tunnel.url) check(`Secure connection: ${info.tunnel.url}/mcp`);
+    else say("· Secure connection: not enabled (local mode)");
+    say(`· Authorized: ${info.tokenCount > 0 ? "yes" : "no"}`);
   });
 
 // ---------------------------------------------------------------- doctor
@@ -366,8 +366,8 @@ program
     if (opts.fix) {
       const sandbox = trySandboxAllow();
       if (sandbox.ok) {
-        report.sandbox = { ok: true, detail: sandbox.alreadyAllowed ? "已在白名单" : "已写入白名单" };
-        if (sandbox.added) results.push("已将本地设置目录加入 Codex 沙箱白名单");
+        report.sandbox = { ok: true, detail: sandbox.alreadyAllowed ? "already allowlisted" : "allowlist updated" };
+        if (sandbox.added) results.push("Added the C2C state dir to the Codex sandbox allowlist");
       } else {
         report.sandbox = { ok: false, detail: sandbox.error };
       }
@@ -376,7 +376,7 @@ program
         const configPath = getCodexConfigPath();
         const allowed =
           fs.existsSync(configPath) && isStateDirAllowlisted(fs.readFileSync(configPath, "utf8"), getStateDir());
-        report.sandbox = allowed ? { ok: true, detail: "已在白名单" } : { ok: false, detail: "未在白名单" };
+        report.sandbox = allowed ? { ok: true, detail: "already allowlisted" } : { ok: false, detail: "not allowlisted" };
       } catch (error) {
         report.sandbox = { ok: false, detail: (error as Error).message };
       }
@@ -398,13 +398,13 @@ program
       if (!runtime && opts.fix) {
         try {
           runtime = (await ensureBridge(root)).runtime;
-          results.push("已自动启动 Bridge");
+          results.push("Started the bridge automatically");
         } catch (error) {
           report.bridge = { ok: false, detail: (error as Error).message };
         }
       }
-      if (runtime) report.bridge = { ok: true, detail: `端口 ${runtime.port}` };
-      else report.bridge = report.bridge ?? { ok: false, detail: "未运行" };
+      if (runtime) report.bridge = { ok: true, detail: `port ${runtime.port}` };
+      else report.bridge = report.bridge ?? { ok: false, detail: "not running" };
     }
 
     // MCP local reachability (401 without token means MCP + auth both work)
@@ -415,7 +415,7 @@ program
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ jsonrpc: "2.0", method: "ping", id: 1 }),
         });
-        report.mcp = { ok: response.status === 401, detail: `未授权请求返回 ${response.status}` };
+        report.mcp = { ok: response.status === 401, detail: `unauthenticated request returned ${response.status}` };
         report.oauth = { ok: response.status === 401 };
       } catch (error) {
         report.mcp = { ok: false, detail: (error as Error).message };
@@ -478,7 +478,7 @@ program
         try {
           runtime = (await ensureBridge(root)).runtime;
           info = await adminFetch<AdminInfo>(runtime, "GET", "/admin/info");
-          results.push("已切换到固定域名连接");
+          results.push("Switched to the named tunnel");
         } catch (error) {
           report.tunnel = { ok: false, detail: (error as Error).message };
         }
@@ -509,7 +509,7 @@ program
               info = await adminFetch<AdminInfo>(runtime, "GET", "/admin/info");
               const sameAddress =
                 previousUrl && normalizePublicUrl(previousUrl) === normalizePublicUrl(started.url);
-              results.push(sameAddress ? "已重新建立安全连接" : "已重新建立安全连接（地址已更换）");
+              results.push(sameAddress ? "Secure connection re-established" : "Secure connection re-established (address changed)");
             }
           }
         } catch (error) {
@@ -546,7 +546,7 @@ program
             const pairing = await adminFetch<PairingResponse>(runtime, "POST", "/admin/pairing");
             connectorRepair.pairingCode = pairing.code;
             connectorRepair.pairingExpiresAt = pairing.expiresAt;
-            results.push(`已生成新的配对码，需要更新「${boundName}」`);
+            results.push(`Generated a fresh pairing code — update "${boundName}" in Claude`);
           } catch (error) {
             report.oauth = { ok: false, detail: (error as Error).message };
           }
@@ -555,7 +555,7 @@ program
         report.tunnel = report.tunnel ?? { ok: false, detail: "NAMED_TUNNEL_DOWN" };
         namedRepair = { needed: true, userMessage: NAMED_REPAIR_MESSAGE };
       } else if (expectedPublic) {
-        report.tunnel = report.tunnel ?? { ok: false, detail: "安全连接未恢复" };
+        report.tunnel = report.tunnel ?? { ok: false, detail: "secure connection not restored" };
         connectorRepair = {
           ...connectorRepair,
           needed: true,
@@ -566,15 +566,15 @@ program
           mcpUrl: null,
         };
       } else if (!currentUrl) {
-        report.tunnel = { ok: true, detail: "未启用（本地模式）" };
+        report.tunnel = { ok: true, detail: "not enabled (local mode)" };
       } else {
-        report.tunnel = { ok: false, detail: "公网地址无法访问" };
+        report.tunnel = { ok: false, detail: "public URL unreachable" };
       }
     } else if (namedReady) {
       report.tunnel = { ok: false, detail: "NAMED_TUNNEL_DOWN" };
       namedRepair = { needed: true, userMessage: NAMED_REPAIR_MESSAGE };
     } else if (lastEndpoint?.publicUrl) {
-      report.tunnel = { ok: false, detail: "安全连接未运行" };
+      report.tunnel = { ok: false, detail: "secure connection not running" };
       connectorRepair = {
         ...connectorRepair,
         needed: true,
@@ -617,18 +617,18 @@ program
     }
     if (connectorRepair.needed && connectorRepair.userMessage) {
       say(connectorRepair.userMessage);
-      if (connectorRepair.mcpUrl) say(`新的连接地址：${connectorRepair.mcpUrl}`);
-      if (connectorRepair.pairingCode) say(`配对码：${connectorRepair.pairingCode}`);
+      if (connectorRepair.mcpUrl) say(`New connector URL: ${connectorRepair.mcpUrl}`);
+      if (connectorRepair.pairingCode) say(`Pairing code: ${connectorRepair.pairingCode}`);
       say("");
     }
     say(
       allOk && !connectorRepair.needed && !namedRepair.needed
         ? "Everything looks good."
         : connectorRepair.needed
-          ? "本地已就绪，还需要在 Claude 的 Customize > Connectors 中删除并重新添加该连接。"
+          ? "Local side is ready — remove and re-add this connector in Claude (Customize > Connectors)."
           : namedRepair.needed
-            ? "固定域名还没连上，需要先登录 Cloudflare。"
-            : "仍有问题未解决，可尝试 `c2c restart --tunnel`。"
+            ? "Named tunnel is down — a Cloudflare login is needed first."
+            : "Issues remain — try `c2c restart --tunnel`."
     );
     if (!allOk || namedRepair.needed) process.exitCode = 1;
   });
@@ -646,8 +646,8 @@ program
       const pairing = await adminFetch<PairingResponse>(runtime, "POST", "/admin/pairing");
       if (opts.json) say(JSON.stringify({ ok: true, pairingCode: pairing.code, expiresAt: pairing.expiresAt }));
       else {
-        say(`配对码：${pairing.code}`);
-        say(`（${Math.round((pairing.expiresAt - Date.now()) / 60000)} 分钟内有效，仅可使用一次）`);
+        say(`Pairing code: ${pairing.code}`);
+        say(`(valid ${Math.round((pairing.expiresAt - Date.now()) / 60000)} min, single use)`);
       }
     } catch (error) {
       handleCliError(error, opts.json);
@@ -670,7 +670,7 @@ program
       // bridge not running: revoke directly in the persisted store
       revoked = new AuthStore(workspace.id).revokeAll();
     }
-    check(`已断开 Claude 对当前项目的访问（已吊销 ${revoked} 个令牌）`);
+    check(`Revoked Claude's access to this workspace (${revoked} tokens)`);
   });
 
 // ---------------------------------------------------------------- logs / workspace / record
@@ -695,7 +695,7 @@ program
       say(filtered.slice(-parseInt(opts.lines, 10)).join("\n"));
       shown = true;
     }
-    if (!shown) say("暂无日志。");
+    if (!shown) say("No logs yet.");
   });
 
 program
@@ -709,9 +709,9 @@ program
     const data = { workspaceId: workspace.id, name: workspace.name, root: workspace.root, ...project };
     if (opts.json) say(JSON.stringify(data));
     else {
-      say(`Workspace：${data.name}（${data.workspaceId}）`);
-      say(`类型：${data.projectType}  语言：${data.languages.join(", ") || "-"}`);
-      say(`路径：${data.root}`);
+      say(`Workspace: ${data.name} (${data.workspaceId})`);
+      say(`Type: ${data.projectType}  Languages: ${data.languages.join(", ") || "-"}`);
+      say(`Path: ${data.root}`);
     }
   });
 
@@ -729,12 +729,12 @@ program
       return;
     }
     if (!result.ok) {
-      cross(`无法写入 Codex 沙箱白名单：${result.error}`);
+      cross(`Failed to update the Codex sandbox allowlist: ${result.error}`);
       process.exitCode = 1;
       return;
     }
-    if (result.alreadyAllowed) check("沙箱白名单已就绪，后续对话无需再提权");
-    else check("已将本地设置目录加入 Codex 沙箱白名单（后续对话无需再提权）");
+    if (result.alreadyAllowed) check("Sandbox allowlist already configured");
+    else check("Added the C2C state dir to the Codex sandbox allowlist");
   });
 
 // ---------------------------------------------------------------- update-check (once per local day)
@@ -774,12 +774,12 @@ program
       note?: string;
     }): void => {
       if (opts.json) say(JSON.stringify({ ok: true, version: VERSION, ...data }));
-      else if (data.updateAvailable) say(`发现新版本（本地 ${data.localCommit?.slice(0, 7)} → 远端 ${data.remoteCommit?.slice(0, 7)}）。`);
-      else say(data.note ?? "已是最新版本。");
+      else if (data.updateAvailable) say(`Update available (local ${data.localCommit?.slice(0, 7)} → remote ${data.remoteCommit?.slice(0, 7)}).`);
+      else say(data.note ?? "Up to date.");
     };
 
     if (!opts.force && last.date === today) {
-      emit({ checked: false, updateAvailable: last.updateAvailable ?? false, note: "今天已检查过更新。" });
+      emit({ checked: false, updateAvailable: last.updateAvailable ?? false, note: "Already checked today." });
       return;
     }
 
@@ -788,7 +788,7 @@ program
     if (!local.ok || !remote.ok || !remote.stdout) {
       // Offline or not a git checkout: skip quietly and retry tomorrow-ish (do not
       // record the date so a transient failure does not suppress the daily check).
-      emit({ checked: false, updateAvailable: false, note: "无法检查更新（离线或非 git 安装），已跳过。" });
+      emit({ checked: false, updateAvailable: false, note: "Update check skipped (offline or not a git install)." });
       return;
     }
     const remoteCommit = remote.stdout.split(/\s/)[0];
@@ -829,11 +829,11 @@ session
     const file = sessionFile(workspace.id);
     const saved = fs.existsSync(file) ? (JSON.parse(fs.readFileSync(file, "utf8")) as SavedSession) : null;
     if (opts.json) say(JSON.stringify({ ok: true, session: saved }));
-    else if (!saved) say("尚未记录 Claude 会话。");
+    else if (!saved) say("No saved conversation for this workspace.");
     else {
-      say(`会话：${saved.title ?? "(untitled)"}`);
-      say(`地址：${saved.url}`);
-      if (saved.taskId) say(`任务：${saved.taskId}（第 ${saved.iteration ?? 0} 轮，${saved.lastState ?? "?"}）`);
+      say(`Conversation: ${saved.title ?? "(untitled)"}`);
+      say(`URL: ${saved.url}`);
+      if (saved.taskId) say(`Task: ${saved.taskId} (iteration ${saved.iteration ?? 0}, ${saved.lastState ?? "?"})`);
     }
   });
 
@@ -859,7 +859,7 @@ session
       savedAt: new Date().toISOString(),
     };
     fs.writeFileSync(file, JSON.stringify(saved, null, 2), { mode: 0o600 });
-    check("已记录 Claude 会话，后续任务将复用");
+    check("Saved. Future tasks will reuse this conversation.");
   });
 
 session
@@ -869,7 +869,7 @@ session
   .action((opts: { workspace?: string }) => {
     const workspace = new Workspace(resolveWorkspace(opts.workspace));
     fs.rmSync(sessionFile(workspace.id), { force: true });
-    check("已清除会话记录，下次任务将新建 Claude 会话");
+    check("Conversation cleared. The next task starts a new one.");
   });
 
 program
@@ -905,7 +905,7 @@ program
         timestamp: new Date().toISOString(),
         notes: opts.notes,
       });
-      check("已记录执行摘要");
+      check("Execution summary recorded");
     }
   );
 
@@ -926,8 +926,8 @@ tunnelCmd
         return;
       }
       if (payload.needsChoice) say(TUNNEL_CHOICE_PROMPT);
-      else if (payload.namedReady) check(`固定域名：${payload.hostname}`);
-      else say("当前使用临时地址。");
+      else if (payload.namedReady) check(`Named tunnel: ${payload.hostname}`);
+      else say("Using a Quick Tunnel (temporary URL).");
     } catch (error) {
       handleCliError(error, opts.json);
     }
@@ -954,7 +954,7 @@ tunnelCmd
         }
         const payload = { ...tunnelChoicePayload(workspace), state };
         if (opts.json) say(JSON.stringify(payload));
-        else check("已选用临时地址");
+        else check("Quick Tunnel selected");
         return;
       }
       if (mode !== "named") {
@@ -965,7 +965,7 @@ tunnelCmd
         const payload = {
           ok: false,
           need: "zone",
-          userMessage: "请告诉我已经加在 Cloudflare 上的域名，例如 example.com",
+          userMessage: "Tell me your Cloudflare domain, e.g. example.com",
           loginPrompt: NAMED_LOGIN_PROMPT,
         };
         if (opts.json) {
@@ -996,7 +996,7 @@ tunnelCmd
         return;
       }
       if (result.fallback) say(result.userMessage ?? "");
-      else check(`固定域名已就绪：${result.state.hostname}`);
+      else check(`Named tunnel ready: ${result.state.hostname}`);
     } catch (error) {
       handleCliError(error, opts.json);
     }
@@ -1013,7 +1013,7 @@ tunnelCmd
       await account.login();
       const payload = { ok: true, loggedIn: hasCloudflaredCert() };
       if (opts.json) say(JSON.stringify(payload));
-      else check("Cloudflare 已登录");
+      else check("Cloudflare login confirmed");
     } catch (error) {
       handleCliError(error, opts.json);
     }
@@ -1024,11 +1024,11 @@ function handleCliError(error: unknown, json: boolean): void {
   if (json) {
     say(JSON.stringify({ ok: false, error: message }));
   } else if (message.startsWith("NEED_CLOUDFLARED")) {
-    say("需要你完成一步：");
+    say("One step needed:");
     say("");
-    say("尚未安装安全连接组件 cloudflared。");
-    say("macOS 用户可运行：brew install cloudflared");
-    say("完成后再试一次即可。");
+    say("cloudflared is not installed.");
+    say("macOS: brew install cloudflared");
+    say("Install it, then retry.");
   } else {
     cross(message);
   }
