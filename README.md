@@ -62,10 +62,15 @@ From your first project:
 
 ```bash
 cd ~/Projects/your-project
-c2c setup
+c2c setup --mode quick
 ```
 
-C2C starts the broker and gives you the MCP endpoint and a one-time pairing code.
+On first run, choose how the public endpoint is exposed:
+
+- `c2c setup --mode quick` — temporary Quick Tunnel (no account)
+- `c2c setup --mode named --zone example.com` — stable hostname (Cloudflare)
+
+C2C starts the broker and gives you the MCP endpoint and a one-time pairing code when authorization is still needed.
 
 In Claude Web:
 
@@ -93,7 +98,7 @@ The Codex skill registers the workspace with the existing C2C installation. No n
 For a permanent connector URL, use a named Cloudflare tunnel:
 
 ```bash
-c2c tunnel choose --mode named --zone <domain>
+c2c broker tunnel choose --mode named --zone <domain>
 ```
 
 A stable endpoint is recommended for the single connector you keep in Claude. Quick Tunnels remain useful for development and temporary testing.
