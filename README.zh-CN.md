@@ -10,6 +10,8 @@
 
 不需要 Claude API Key，也不使用逆向代理。Claude 通过一条 OAuth 保护的公网只读 MCP 连接，按需读取当前工作区的信息。
 
+> 本项目基于 [@XiaoDuoYa](https://github.com/XiaoDuoYa) 的 [codex-with-chatgpt](https://github.com/XiaoDuoYa/codex-with-chatgpt) 的原始创意与架构，现已发展为面向 Claude Web 的独立实现，并扩展为一条连接器服务多个 Codex 工作区。感谢原作者的创意。
+
 职责边界很明确：
 
 - Claude：推理、规划、检查、Review。
