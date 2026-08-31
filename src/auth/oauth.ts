@@ -140,7 +140,7 @@ function pairingPage(opts: {
 <body>
 <div class="card">
   <h1>${escapedProductName}</h1>
-  <p class="sub">${escapedClientName} is requesting access to workspace <strong>${escapedWorkspaceName}</strong> (read-only):</p>
+  <p class="sub">${escapedClientName} is requesting read-only access through <strong>${escapedWorkspaceName}</strong>:</p>
   <ul>${scopeList}</ul>
   <form method="POST" action="authorize">
     <input type="hidden" name="request_id" value="${escapedRequestId}">
