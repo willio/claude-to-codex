@@ -1,5 +1,5 @@
 {
-  "name": "codex-with-claude",
+  "name": "claude-to-codex",
   "version": "0.1.0",
   "description": "Claude thinks. Codex works. Use Claude Web as the planning and review brain while keeping the Codex harness.",
   "type": "module",

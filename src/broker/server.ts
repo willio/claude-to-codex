@@ -22,7 +22,7 @@ import {
 import { WorkspaceRegistry, RegistryError } from "../workspaces/registry.js";
 import { SessionRegistry } from "../workspaces/sessions.js";
 
-export const CONNECTOR_DISPLAY_NAME = "Codex with Claude";
+export const CONNECTOR_DISPLAY_NAME = "Claude to Codex";
 
 export interface BrokerOptions {
   /** Defaults to the standard C2C state dir. */

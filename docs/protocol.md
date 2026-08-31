@@ -40,7 +40,7 @@ GOAL:
 Implement dark mode.
 
 INSTRUCTION:
-Inspect the connected workspace through Codex with Claude MCP.
+Inspect the connected workspace through Claude to Codex MCP.
 Create an implementation plan for Codex.
 ```
 
@@ -171,7 +171,7 @@ Codex owns execution.
 You own high-level reasoning, planning and review.
 
 You have access to the current local workspace through the
-"Codex with Claude" MCP connector.
+"Claude to Codex" MCP connector.
 
 Rules:
 
