@@ -55,7 +55,7 @@ afterAll(async () => {
 });
 
 describe("MCP tools over Streamable HTTP", () => {
-  it("lists all eight read-only tools", async () => {
+  it("lists all nine read-only tools including list_workspaces", async () => {
     const { tools } = await client.listTools();
     const names = tools.map((tool) => tool.name).sort();
     expect(names).toEqual([
@@ -63,6 +63,7 @@ describe("MCP tools over Streamable HTTP", () => {
       "git_diff",
       "git_status",
       "list_directory",
+      "list_workspaces",
       "read_file",
       "search_workspace",
       "test_status",

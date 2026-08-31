@@ -1,7 +1,7 @@
 import express, { type Request, type Response } from "express";
 import type { Server } from "node:http";
 import { randomBytes } from "node:crypto";
-import { Workspace } from "../workspace/manager.js";
+import path from "node:path";
 import { AuthStore } from "../auth/store.js";
 import { createOAuthRouter } from "../auth/oauth.js";
 import { bearerAuth } from "../auth/middleware.js";
@@ -9,29 +9,24 @@ import { PairingManager } from "../pairing/manager.js";
 import { createMcpServer } from "../mcp/server.js";
 import { createMcpHttpHandler } from "../mcp/http.js";
 import { CloudflaredQuickTunnel } from "../tunnel/cloudflared.js";
-import { CloudflaredNamedTunnel } from "../tunnel/cloudflared-named.js";
 import type { TunnelProvider } from "../tunnel/provider.js";
-import { namedTunnelBinding, readTunnelState } from "../tunnel/state.js";
 import { Logger, nullLogger } from "../logger/index.js";
-import { DEFAULT_HOST, DEFAULT_PORT } from "../config/paths.js";
+import { DEFAULT_HOST, DEFAULT_PORT, getStateDir } from "../config/paths.js";
 import { SERVICE_NAME, VERSION } from "../version.js";
-import { writeRuntimeState, clearRuntimeState, probeBridge, type RuntimeState } from "./runtime.js";
-import { createAdminGuard } from "./admin-guard.js";
+import { writeRuntimeState, clearRuntimeState, type RuntimeState } from "../bridge/runtime.js";
+import { createAdminGuard } from "../bridge/admin-guard.js";
+import {
+  loadOrCreateInstallation,
+  type InstallationIdentity,
+} from "../workspaces/installation.js";
+import { WorkspaceRegistry, RegistryError } from "../workspaces/registry.js";
+import { SessionRegistry } from "../workspaces/sessions.js";
 
-function tunnelForWorkspace(workspaceId: string, logger: Logger): TunnelProvider {
-  const binding = namedTunnelBinding(readTunnelState(workspaceId));
-  if (binding) {
-    return new CloudflaredNamedTunnel({
-      tunnelName: binding.tunnelName,
-      hostname: binding.hostname,
-      logger,
-    });
-  }
-  return new CloudflaredQuickTunnel(logger);
-}
+export const CONNECTOR_DISPLAY_NAME = "Codex with Claude";
 
-export interface BridgeOptions {
-  workspaceRoot: string;
+export interface BrokerOptions {
+  /** Defaults to the standard C2C state dir. */
+  stateDir?: string;
   port?: number;
   host?: string;
   logger?: Logger;
@@ -43,22 +38,42 @@ export interface BridgeOptions {
   accessTokenTtlMs?: number;
 }
 
-export interface Bridge {
-  workspace: Workspace;
-  port: number;
-  host: string;
-  adminToken: string;
+export interface Broker {
+  installation: InstallationIdentity;
+  registry: WorkspaceRegistry;
+  sessions: SessionRegistry;
   authStore: AuthStore;
   pairing: PairingManager;
   tunnel: TunnelProvider;
-  getPublicBaseUrl(): string | null;
+  port: number;
+  host: string;
+  adminToken: string;
   localBaseUrl(): string;
   close(): Promise<void>;
 }
 
-/**
- * Listen on the preferred port; on EADDRINUSE fall back to an ephemeral port.
- */
+export interface BrokerInfo {
+  service: string;
+  version: string;
+  installationId: string;
+  displayName: string;
+  workspaceCount: number;
+  activeSessions: number;
+  port: number;
+  publicUrl: string | null;
+  tunnel: { running: boolean; url: string | null; provider: string };
+  tokenCount: number;
+  pairingActive: boolean;
+  pid: number;
+  startedAt: string;
+}
+
+interface TunnelStartResponse {
+  url?: string;
+  error?: string;
+  message?: string;
+}
+
 function listen(app: express.Express, host: string, preferredPort: number): Promise<{ server: Server; port: number }> {
   return new Promise((resolve, reject) => {
     const tryListen = (port: number, allowFallback: boolean): void => {
@@ -80,17 +95,29 @@ function listen(app: express.Express, host: string, preferredPort: number): Prom
   });
 }
 
-export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
+/**
+ * The installation-level broker: one stable MCP endpoint (one Claude
+ * connector, one OAuth/pairing relationship) serving every registered
+ * Codex workspace. Claude addresses workspaces only by opaque registry
+ * id; roots never leave the machine and every read stays confined to the
+ * resolved workspace.
+ */
+export async function startBroker(opts: BrokerOptions = {}): Promise<Broker> {
   const logger = opts.logger ?? nullLogger;
-  const workspace = new Workspace(opts.workspaceRoot);
+  const stateDir = opts.stateDir ?? getStateDir();
   const host = opts.host ?? DEFAULT_HOST;
   if (host !== "127.0.0.1" && host !== "::1" && host !== "localhost") {
-    throw new Error("The bridge only binds to loopback addresses. Public exposure goes through the tunnel.");
+    throw new Error("The broker only binds to loopback addresses. Public exposure goes through the tunnel.");
   }
 
-  const authStore = new AuthStore(workspace.id, { file: opts.authStoreFile });
-  const pairing = new PairingManager(workspace.id, { ttlMs: opts.pairingTtlMs });
-  const tunnel = opts.tunnelProvider ?? tunnelForWorkspace(workspace.id, logger);
+  const installation = loadOrCreateInstallation(stateDir);
+  const registry = WorkspaceRegistry.load(stateDir);
+  const sessions = SessionRegistry.load(stateDir, { workspaces: registry });
+  const authStore = new AuthStore(installation.installationId, {
+    file: opts.authStoreFile ?? path.join(stateDir, "auth", `${installation.installationId}.json`),
+  });
+  const pairing = new PairingManager(installation.installationId, { ttlMs: opts.pairingTtlMs });
+  const tunnel = opts.tunnelProvider ?? new CloudflaredQuickTunnel(logger);
   const adminToken = `c2c_admin_${randomBytes(24).toString("base64url")}`;
 
   let publicBaseUrl: string | null = null;
@@ -109,16 +136,21 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
   // ---- Health (public but minimal) ---------------------------------------
 
   app.get("/health", (_req, res) => {
-    res.json({ service: SERVICE_NAME, version: VERSION, workspaceId: workspace.id, status: "ok" });
+    res.json({
+      service: SERVICE_NAME,
+      version: VERSION,
+      workspaceId: installation.installationId,
+      status: "ok",
+    });
   });
 
-  // ---- OAuth + discovery ---------------------------------------------------
+  // ---- OAuth + discovery (installation-bound) ------------------------------
 
   app.use(
     createOAuthRouter({
       store: authStore,
       pairing,
-      workspaceName: workspace.name,
+      workspaceName: CONNECTOR_DISPLAY_NAME,
       getBaseUrl,
       logger,
     })
@@ -126,17 +158,25 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
 
   // ---- MCP endpoint (bearer-protected) --------------------------------------
 
-  const mcpHandler = createMcpHttpHandler(() => createMcpServer({ workspace, logger }), logger);
+  const mcpHandler = createMcpHttpHandler(
+    () => createMcpServer({ registry, sessions, logger }),
+    logger
+  );
   app.all(
     "/mcp",
     express.json({ limit: "8mb" }),
-    bearerAuth({ store: authStore, workspaceId: workspace.id, getBaseUrl, logger }),
+    bearerAuth({
+      store: authStore,
+      workspaceId: installation.installationId,
+      getBaseUrl,
+      logger,
+    }),
     (req: Request, res: Response) => {
       void mcpHandler(req, res);
     }
   );
 
-  // ---- Admin API (loopback + admin token only; used by the CLI/Skill) --------
+  // ---- Admin API (loopback + admin token only; CLI/local tooling) -----------
 
   const adminGuard = createAdminGuard(adminToken);
 
@@ -147,12 +187,13 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
   });
 
   app.get("/admin/info", adminGuard, (_req, res) => {
-    res.json({
+    const info: BrokerInfo = {
       service: SERVICE_NAME,
       version: VERSION,
-      workspaceId: workspace.id,
-      workspaceName: workspace.name,
-      workspaceRoot: workspace.root,
+      installationId: installation.installationId,
+      displayName: CONNECTOR_DISPLAY_NAME,
+      workspaceCount: registry.list().length,
+      activeSessions: sessions.list().length,
       port,
       publicUrl: publicBaseUrl,
       tunnel: tunnel.status(),
@@ -160,7 +201,38 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
       pairingActive: pairing.hasActiveSession(),
       pid: process.pid,
       startedAt,
-    });
+    };
+    res.json(info);
+  });
+
+  app.post("/admin/workspace", adminGuard, (req, res) => {
+    const body = req.body as { root?: string; displayName?: string };
+    if (!body.root) {
+      res.status(400).json({ error: "invalid_request", message: "root is required" });
+      return;
+    }
+    try {
+      res.json(registry.register({ root: body.root, displayName: body.displayName }));
+    } catch (error) {
+      if (error instanceof RegistryError) {
+        res.status(400).json({ error: error.code, message: error.message });
+        return;
+      }
+      throw error;
+    }
+  });
+
+  app.get("/admin/workspaces", adminGuard, (_req, res) => {
+    res.json({ workspaces: registry.list() });
+  });
+
+  app.post("/admin/workspace/remove", adminGuard, (req, res) => {
+    const body = req.body as { id?: string };
+    if (!body.id) {
+      res.status(400).json({ error: "invalid_request", message: "id is required" });
+      return;
+    }
+    res.json({ removed: registry.remove(body.id) });
   });
 
   app.post("/admin/tunnel/start", adminGuard, (_req, res) => {
@@ -200,30 +272,19 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
   });
 
   const { server, port } = await listen(app, host, opts.port ?? DEFAULT_PORT);
-  // If the preferred port was taken and we fell back to an ephemeral one,
-  // make sure we are not a duplicate daemon for an already-live bridge on the
-  // preferred port. Silently continuing here would overwrite the runtime
-  // state file and split the CLI (admin API) from the tunnel-bearing bridge.
-  const preferredPort = opts.port ?? DEFAULT_PORT;
-  if (port !== preferredPort) {
-    const occupant = await probeBridge(preferredPort);
-    if (occupant && occupant.workspaceId === workspace.id) {
-      server.close();
-      throw new Error(
-        `A bridge for this workspace is already running on port ${preferredPort}; not starting a duplicate.`
-      );
-    }
-  }
   const startedAt = new Date().toISOString();
-  logger.info(`Bridge listening on ${host}:${port} for workspace ${workspace.name} (${workspace.id})`);
+  logger.info(
+    `Broker listening on ${host}:${port} for installation ${installation.installationId} ` +
+      `(${registry.list().length} workspace(s))`
+  );
 
   const persistRuntime = (): void => {
     if (opts.persistRuntime === false) return;
     const state: RuntimeState = {
       service: SERVICE_NAME,
       version: VERSION,
-      workspaceId: workspace.id,
-      workspaceRoot: workspace.root,
+      workspaceId: installation.installationId,
+      workspaceRoot: stateDir,
       pid: process.pid,
       port,
       adminToken,
@@ -240,19 +301,20 @@ export async function startBridge(opts: BridgeOptions): Promise<Bridge> {
     closed = true;
     await tunnel.stop().catch(() => undefined);
     await new Promise<void>((resolve) => server.close(() => resolve()));
-    if (opts.persistRuntime !== false) clearRuntimeState(workspace.id);
-    logger.info("Bridge stopped");
+    if (opts.persistRuntime !== false) clearRuntimeState(installation.installationId);
+    logger.info("Broker stopped");
   };
 
   return {
-    workspace,
-    port,
-    host,
-    adminToken,
+    installation,
+    registry,
+    sessions,
     authStore,
     pairing,
     tunnel,
-    getPublicBaseUrl: () => publicBaseUrl,
+    port,
+    host,
+    adminToken,
     localBaseUrl: () => `http://${host}:${port}`,
     close: shutdown,
   };
