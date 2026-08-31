@@ -35,11 +35,13 @@ corepack pnpm install
 corepack pnpm build
 ```
 
-Install `skill/SKILL.md` as a Codex skill, then follow its first-time setup workflow.
+Optional: `npm install -g .` puts `c2c` on your PATH everywhere — including GUI-spawned agents such as the Codex desktop app, which only see the system PATH. The CLI needs `node` and, for tunnels, `cloudflared` resolvable from that same PATH.
+
+Install `skill/SKILL.md` as a Codex skill (e.g. copy it to `~/.codex/skills/codex-with-claude/SKILL.md`), then follow its first-time setup workflow.
 
 ## First-time setup
 
-Run:
+In the project you want to connect, run:
 
 ```bash
 c2c setup
@@ -55,9 +57,11 @@ In Claude Web:
 4. Enter the one-time pairing code on the C2C authorization page.
 5. Enable the connector and ask Claude to call `workspace_info` to verify the workspace.
 
-Connector creation in Claude Web is an explicit user action. The Codex skill prepares and diagnoses the local side; it does not claim to automate Claude's connector UI.
+Timing notes:
 
-For a stable endpoint, configure a named Cloudflare Tunnel. Quick Tunnel works without a Cloudflare account but its public URL may change after restart.
+- The pairing page auto-submits the moment a complete code is pasted or typed. Codes are single-use and expire in ~5 minutes; an authorization page expires after ~10 minutes. Mint the code when the page is open (`c2c pair`), not up front — the bundled Codex skill sequences it this way.
+- Connector creation in Claude Web is an explicit user action. The Codex skill prepares and diagnoses the local side; it does not claim to automate Claude's connector UI.
+- Per-project setup is deliberate: authorization is bound to one workspace, so each project gets its own connector. For a stable endpoint use a named Cloudflare Tunnel (`c2c tunnel choose --mode named`); Quick Tunnel URLs change across reboots, which means re-adding the connector.
 
 ## Workflow
 
@@ -138,7 +142,7 @@ c2c logs
 c2c stop
 ```
 
-`c2c doctor` diagnoses the local bridge, tunnel, sandbox configuration, and connector endpoint state. If a temporary tunnel URL changes, it identifies the affected workspace connector so it can be re-added in Claude.
+`c2c doctor` diagnoses the local bridge, tunnel, sandbox configuration, and connector endpoint state. If a temporary tunnel URL changes, it identifies the affected workspace connector so it can be re-added in Claude. Bridge detection retries flaky loopback health probes and refuses to start a duplicate daemon for a workspace that is already served, so a missed probe cannot split the CLI from the tunnel-bearing bridge.
 
 ## Compatibility
 
@@ -179,7 +183,9 @@ docs/         architecture, protocol, security, migration, troubleshooting, loca
 
 ## Status
 
-The Claude adaptation currently covers connector endpoints, OAuth presentation, Codex skill instructions, state-directory compatibility, CI, and the core read-only MCP boundary. Remaining legacy CLI machine fields are retained only where changing them would create a compatibility break.
+The Claude adaptation is complete and end-to-end validated on macOS: Claude-native connector endpoints, OAuth presentation and an auto-submitting pairing page, a Claude-native English CLI with a canonical `connectorRepair` doctor field, a Codex skill that prepares locally and pairs on demand, state-directory compatibility, a probe-resilient daemon lifecycle, and CI. The full validated procedure and findings are in [docs/local-e2e.md](docs/local-e2e.md).
+
+Machine-readable aliases such as `chatgptRepair` are retained only where renaming them would break existing consumers; see [docs/migration.md](docs/migration.md).
 
 Unofficial community project. Not affiliated with or endorsed by Anthropic or OpenAI.
 
