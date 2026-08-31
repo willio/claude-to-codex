@@ -34,7 +34,7 @@ describe("c2c doctor --json compatibility", () => {
     // Workspace ids are a hash of the resolved root; mirror Workspace's rule.
     const realId = createHash("sha256").update(root.toLowerCase()).digest("hex").slice(0, 12);
 
-    const connectorName = "Codex with Claude · doctor-json-test";
+    const connectorName = "Claude to Codex · doctor-json-test";
     const endpointsDir = path.join(stateDir, "endpoints");
     fs.mkdirSync(endpointsDir, { recursive: true, mode: 0o700 });
     fs.writeFileSync(
