@@ -13,7 +13,7 @@ Pakai Claude Web (free atau paid) untuk merencanakan, menganalisis, dan meninjau
 - **Terisolasi per workspace.** Project didaftarkan secara lokal. Claude hanya melihat workspace ID yang opaque, bukan filesystem root secara bebas, dan setiap akses file dibatasi ke workspace yang diberikan.
 - **Local-first.** Source code tetap berada di mesin Anda dan hanya bagian yang dibutuhkan yang diberikan kepada Claude melalui request MCP read-only.
 
-## Cara kerjanya
+## Alur kerja
 
 ```text
 Claude Web (plan · reason · review)
@@ -37,7 +37,7 @@ Claude memeriksa code, diff, status Git, dan hasil test yang telah direkam melal
 
 Semua capability yang tersedia untuk Claude bersifat read-only. Workspace didaftarkan secara lokal oleh Codex/C2C dan diakses menggunakan ID opaque. Setiap path dicanonicalize dan dibatasi di dalam workspace yang diberikan, sementara file sensitif seperti `.env`, private key, dan credential ditolak.
 
-## Quick start
+## Inisiasi
 
 Persyaratan: Node.js ≥ 20, `git`, `cloudflared`, dan Claude Web dengan dukungan custom connector.
 
@@ -56,7 +56,7 @@ mkdir -p ~/.codex/skills/claude-to-codex
 cp skill/SKILL.md ~/.codex/skills/claude-to-codex/
 ```
 
-### Hubungkan Claude — cukup sekali
+### Hubungkan Claude
 
 Dari project pertama:
 
@@ -132,7 +132,7 @@ execution_summary
 
 `test_status` dan `execution_summary` hanya membaca hasil yang sebelumnya telah direkam oleh Codex. Keduanya tidak dapat menjalankan command atau test.
 
-## Model keamanan
+## Kebijakan Keamanan
 
 **Tidak ada mutation surface.** MCP server tidak menyediakan tool untuk menulis file, menjalankan shell atau command, melakukan commit, maupun bentuk mutasi lainnya. Seluruh otoritas eksekusi tetap berada pada Codex.
 
@@ -210,11 +210,11 @@ docs/             architecture, protocol, security and migration
 
 ## Credits
 
-Claude to Codex dibangun di atas ide dan arsitektur asli [codex-with-chatgpt](https://github.com/XiaoDuoYa/codex-with-chatgpt) karya [@XiaoDuoYa](https://github.com/XiaoDuoYa).
+Claude to Codex dibangun di atas ide dan arsitektur dari [codex-with-chatgpt](https://github.com/XiaoDuoYa/codex-with-chatgpt) karya [@XiaoDuoYa](https://github.com/XiaoDuoYa).
 
 Project ini kemudian berkembang menjadi implementasi independen untuk Claude Web, dengan tetap menjaga atribusi untuk karya upstream dan copyright MIT-nya di [LICENSE](LICENSE).
 
-Claude to Codex adalah project komunitas tidak resmi dan tidak berafiliasi dengan maupun didukung oleh Anthropic atau OpenAI.
+Claude to Codex adalah project komunitas dan tidak terafiliasi atau didukung oleh Anthropic maupun OpenAI.
 
 ## License
 
