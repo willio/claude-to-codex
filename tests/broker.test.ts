@@ -288,8 +288,8 @@ describe("broker named tunnel binding", () => {
       provider: "cloudflare-named",
       tunnelName: "c2c-installation",
       tunnelId: "00000000-0000-0000-0000-000000000000",
-      hostname: "condor.portfolio.id",
-      zone: "portfolio.id",
+      hostname: "c2c.example.com",
+      zone: "example.com",
       configuredAt: new Date().toISOString(),
     });
     const soloRoot = makeTmpDir("broker-named-ws");
