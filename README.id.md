@@ -2,7 +2,7 @@
 
 [English](README.md) | **Bahasa Indonesia** | [简体中文](README.zh-CN.md)
 
-**Claude yang mikir. Codex jadi bekerja.**
+**Claude yang mikir. Codex jadi eksekutor.**
 
 Pakai Claude Web (free atau paid) untuk merencanakan, menganalisis, dan meninjau. Codex yang mengeksekusi — keduanya terhubung melalui MCP bridge yang aman dan read-only.
 
