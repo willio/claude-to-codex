@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { Response } from "express";
 
 export function escapeHtml(value: string): string {
@@ -9,10 +10,17 @@ export function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
-export function setAuthSecurityHeaders(res: Response): void {
+/**
+ * Allow one specific inline script via CSP hash. Anything else stays blocked
+ * by `default-src 'none'`.
+ */
+export function setAuthSecurityHeaders(res: Response, opts: { script?: string } = {}): void {
+  const scriptSrc = opts.script
+    ? `script-src 'sha256-${createHash("sha256").update(opts.script).digest("base64")}';`
+    : "";
   res.setHeader(
     "Content-Security-Policy",
-    "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
+    `default-src 'none'; style-src 'unsafe-inline'; ${scriptSrc} form-action 'self'; base-uri 'none'; frame-ancestors 'none'`
   );
   res.setHeader("X-Content-Type-Options", "nosniff");
   res.setHeader("X-Frame-Options", "DENY");
