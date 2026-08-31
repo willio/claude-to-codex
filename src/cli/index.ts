@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -26,7 +27,7 @@ import {
   TUNNEL_CHOICE_PROMPT,
 } from "../tunnel/state.js";
 import { Logger } from "../logger/index.js";
-import { getStateDir } from "../config/paths.js";
+import { getStateDir, STATE_DIR_NAME } from "../config/paths.js";
 import { ensureSandboxAllowlist, getCodexConfigPath, isStateDirAllowlisted } from "../config/sandbox-allow.js";
 import {
   CONNECTOR_SETTINGS_URL,
@@ -1107,6 +1108,82 @@ planCmd
     }
     for (const plan of plans) {
       check(`#${plan.planId} — task ${plan.taskId} — ${plan.content.length} chars — ${plan.receivedAt}`);
+    }
+  });
+
+// ---------------------------------------------------------------- install (systemwide ~/.c2c)
+
+program
+  .command("install")
+  .description("Install Claude to Codex systemwide under ~/.c2c: app, state migration, launcher, skill")
+  .option("--json", "machine-readable output", false)
+  .action(async (opts: { json: boolean }) => {
+    try {
+      const { getC2cHome } = await import("../config/paths.js");
+      const home = getC2cHome();
+      const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+      const homeApp = path.join(home, "app");
+      const homeBin = path.join(home, "bin");
+
+      fs.mkdirSync(homeBin, { recursive: true, mode: 0o755 });
+
+      // 1. self-contained app copy: dist + bin + package.json + runtime deps
+      fs.rmSync(homeApp, { recursive: true, force: true });
+      for (const entry of ["dist", "bin", "skill"]) {
+        fs.cpSync(path.join(appRoot, entry), path.join(homeApp, entry), { recursive: true });
+      }
+      fs.copyFileSync(path.join(appRoot, "package.json"), path.join(homeApp, "package.json"));
+      const npmInstall = spawnSync("npm", ["install", "--omit=dev", "--no-audit", "--no-fund"], {
+        cwd: homeApp,
+        encoding: "utf8",
+        timeout: 300_000,
+      });
+      if (npmInstall.status !== 0 || !fs.existsSync(path.join(homeApp, "node_modules"))) {
+        throw new Error(
+          `Dependency install failed in ${homeApp}: ${npmInstall.stderr || npmInstall.stdout || "unknown error"}`
+        );
+      }
+
+      // 2. launcher: ~/.c2c/bin/c2c -> ../app/bin/c2c.js, and the systemwide link
+      const launcher = path.join(homeBin, "c2c");
+      fs.rmSync(launcher, { force: true });
+      fs.symlinkSync("../app/bin/c2c.js", launcher);
+      const systemLink = "/usr/local/bin/c2c";
+      try {
+        fs.rmSync(systemLink, { force: true });
+        fs.symlinkSync(launcher, systemLink);
+      } catch {
+        say(`· Could not update ${systemLink} — link it manually: sudo ln -sf ${launcher} ${systemLink}`);
+      }
+
+      // 3. non-destructive state migration from the OS-convention directory
+      const osRoot = path.join(os.homedir(), "Library", "Application Support", STATE_DIR_NAME);
+      const homeState = path.join(home, "state");
+      let migrated = false;
+      if (fs.existsSync(osRoot) && !fs.existsSync(homeState)) {
+        fs.cpSync(osRoot, homeState, { recursive: true });
+        migrated = true;
+      }
+
+      // 4. Codex skill
+      const skillDir = path.join(os.homedir(), ".codex", "skills", "claude-to-codex");
+      fs.mkdirSync(skillDir, { recursive: true, mode: 0o755 });
+      fs.copyFileSync(path.join(appRoot, "skill", "SKILL.md"), path.join(skillDir, "SKILL.md"));
+
+      if (opts.json) {
+        say(JSON.stringify({ ok: true, home, app: homeApp, state: homeState, migrated }));
+        return;
+      }
+      check(`App installed: ${homeApp}`);
+      check(`Launcher: ${systemLink} -> ${launcher}`);
+      check(`Codex skill: ${skillDir}`);
+      check(migrated ? `State migrated: ${osRoot} -> ${homeState} (original kept)` : `State: ${homeState}`);
+      say("");
+      say("Development tip: run dev builds with C2C_STATE_DIR set to a scratch dir so");
+      say("tests and experiments never touch this installation.");
+      if (migrated) say("Restart the broker to run the installed app: `c2c broker stop && c2c broker start`.");
+    } catch (error) {
+      handleCliError(error, opts.json);
     }
   });
 

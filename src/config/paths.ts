@@ -27,10 +27,24 @@ function platformStateRoot(home: string): string {
  * use it when the new directory does not yet exist, avoiding an implicit loss
  * of connector/session/token state during the fork migration.
  */
+/** Systemwide installation home for the app, its state, and its launcher. */
+export const DEFAULT_C2C_HOME = path.join(os.homedir(), ".c2c");
+
+export function getC2cHome(): string {
+  const override = process.env.C2C_HOME?.trim();
+  return override ? path.resolve(override) : DEFAULT_C2C_HOME;
+}
+
 export function getStateDir(): string {
+  // 1. explicit override (tests / parallel installs)
   const override = process.env.C2C_STATE_DIR;
   if (override && override.trim() !== "") return path.resolve(override);
 
+  // 2. the systemwide installation home, once `c2c install` has created it
+  const homeState = path.join(getC2cHome(), "state");
+  if (fs.existsSync(homeState)) return homeState;
+
+  // 3./4. OS-convention dirs from before ~/.c2c existed (never rewritten here)
   const root = platformStateRoot(os.homedir());
   const preferred = path.join(root, STATE_DIR_NAME);
   const legacy = path.join(root, LEGACY_STATE_DIR_NAME);
