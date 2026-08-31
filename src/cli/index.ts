@@ -1113,13 +1113,14 @@ brokerCmd
 program
   .command("use")
   .description("Register a project workspace with the C2C installation (defaults to current directory)")
+  .argument("[path]")
   .option("-w, --workspace <path>")
   .option("--name <name>", "display name for the workspace")
   .option("--json", "machine-readable output", false)
-  .action(async (opts: { workspace?: string; name?: string; json: boolean }) => {
+  .action(async (pathArg: string | undefined, opts: { workspace?: string; name?: string; json: boolean }) => {
     try {
       const { ensureBroker } = await import("../broker/daemon.js");
-      const root = resolveWorkspace(opts.workspace);
+      const root = resolveWorkspace(pathArg ?? opts.workspace);
       const runtime = await ensureBroker();
       const registration = await adminFetch<{ id: string; displayName: string }>(
         runtime,
