@@ -1,6 +1,6 @@
 # Codex with Claude
 
-**简体中文** | [English](README.md) | [Bahasa Indonesia](README.id.md)
+[English](README.md) | [Bahasa Indonesia](README.id.md) | **简体中文**
 
 > Claude 负责思考，Codex 负责执行。
 
