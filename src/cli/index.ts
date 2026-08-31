@@ -1019,6 +1019,97 @@ tunnelCmd
     }
   });
 
+// ---------------------------------------------------------------- plan (Claude → Codex handoff)
+
+const planCmd = program
+  .command("plan")
+  .description("Local inbox for Claude's responses: pull, show, and list plans for this workspace");
+
+planCmd
+  .description("Pull Claude's response from the clipboard into this workspace's plan inbox")
+  .option("-w, --workspace <path>")
+  .option("--file <path>", "read the plan from a file instead of the clipboard")
+  .option("--stdin", "read the plan from stdin")
+  .option("--task <id>", "task id to associate with the plan", "main")
+  .option("--json", "machine-readable output", false)
+  .action(async (opts: { workspace?: string; file?: string; stdin?: boolean; task: string; json: boolean }) => {
+    try {
+      const workspace = new Workspace(resolveWorkspace(opts.workspace));
+      let content: string | null = null;
+      let source: "clipboard" | "file" | "stdin" = "clipboard";
+      if (opts.file) {
+        content = fs.readFileSync(resolveWorkspace(opts.file), "utf8").trim();
+        source = "file";
+      } else if (opts.stdin) {
+        content = fs.readFileSync(0, "utf8").trim();
+        source = "stdin";
+      } else {
+        const { readClipboardText } = await import("../plans/clipboard.js");
+        content = readClipboardText();
+      }
+      if (!content) {
+        cross("Clipboard is empty or unreadable. Copy Claude's response, or use --file <path> / --stdin.");
+        process.exitCode = 1;
+        return;
+      }
+      const { appendPlanRecord } = await import("../plans/records.js");
+      const plan = appendPlanRecord(workspace.id, { taskId: opts.task, content, source, receivedAt: new Date().toISOString() });
+      if (opts.json) {
+        say(JSON.stringify({ ok: true, ...plan }));
+        return;
+      }
+      check(`Plan #${plan.planId} received (task ${plan.taskId}, ${content.length} chars)`);
+      say("Codex: read it with `c2c plan show --json` and display it before executing.");
+    } catch (error) {
+      handleCliError(error, opts.json);
+    }
+  });
+
+planCmd
+  .command("show")
+  .description("Show the latest plan (what Codex should display and execute)")
+  .option("-w, --workspace <path>")
+  .option("--json", "machine-readable output", false)
+  .action(async (opts: { workspace?: string; json: boolean }) => {
+    const workspace = new Workspace(resolveWorkspace(opts.workspace));
+    const { latestPlanRecord } = await import("../plans/records.js");
+    const plan = latestPlanRecord(workspace.id);
+    if (!plan) {
+      if (opts.json) say(JSON.stringify({ ok: true, plan: null }));
+      else say("No plans yet. Copy Claude's response, then run `c2c plan`.");
+      return;
+    }
+    if (opts.json) {
+      say(JSON.stringify({ ok: true, plan }));
+      return;
+    }
+    say(`Plan #${plan.planId} (task ${plan.taskId}, received ${plan.receivedAt}):`);
+    say("");
+    say(plan.content);
+  });
+
+planCmd
+  .command("list")
+  .description("List received plans, newest last")
+  .option("-w, --workspace <path>")
+  .option("--json", "machine-readable output", false)
+  .action(async (opts: { workspace?: string; json: boolean }) => {
+    const workspace = new Workspace(resolveWorkspace(opts.workspace));
+    const { readPlanRecords } = await import("../plans/records.js");
+    const plans = readPlanRecords(workspace.id);
+    if (opts.json) {
+      say(JSON.stringify({ ok: true, plans }));
+      return;
+    }
+    if (plans.length === 0) {
+      say("No plans yet.");
+      return;
+    }
+    for (const plan of plans) {
+      check(`#${plan.planId} — task ${plan.taskId} — ${plan.content.length} chars — ${plan.receivedAt}`);
+    }
+  });
+
 // ---------------------------------------------------------------- broker (installation-level connector)
 
 program
