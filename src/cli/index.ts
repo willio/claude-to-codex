@@ -1019,6 +1019,155 @@ tunnelCmd
     }
   });
 
+// ---------------------------------------------------------------- broker (installation-level connector)
+
+program
+  .command("broker-serve", { hidden: true })
+  .description("Run the installation broker in the foreground (internal)")
+  .action(async () => {
+    const logger = new Logger({ name: "broker", console: true });
+    const { startBroker } = await import("../broker/server.js");
+    const broker = await startBroker({ logger });
+    const shutdown = (): void => {
+      void broker.close().then(() => process.exit(0));
+    };
+    process.on("SIGINT", shutdown);
+    process.on("SIGTERM", shutdown);
+    say(`broker ready on port ${broker.port} (installation ${broker.installation.installationId})`);
+  });
+
+const brokerCmd = program
+  .command("broker")
+  .description("One connector for every project: manage the installation broker");
+
+brokerCmd
+  .command("start")
+  .description("Start (or reuse) the installation broker and its public endpoint")
+  .option("--tunnel", "establish the public endpoint if not up", true)
+  .option("--no-tunnel", "local only (no public endpoint)")
+  .option("--json", "machine-readable output", false)
+  .action(async (opts: { tunnel: boolean; json: boolean }) => {
+    try {
+      const { ensureBroker, ensureBrokerTunnel } = await import("../broker/daemon.js");
+      const runtime = await ensureBroker();
+      let mcpUrl: string | null = null;
+      if (opts.tunnel) {
+        const url = await ensureBrokerTunnel(runtime);
+        mcpUrl = `${url}/mcp`;
+      }
+      if (opts.json) {
+        say(JSON.stringify({ ok: true, installationId: runtime.workspaceId, port: runtime.port, mcpUrl }));
+        return;
+      }
+      check(`Installation broker is running (port ${runtime.port})`);
+      if (mcpUrl) {
+        check(`Connector URL: ${mcpUrl}`);
+        say("");
+        say("Add this URL once in Claude (Customize > Connectors > Add custom connector).");
+        say("Every project registered with `c2c use` becomes available through it.");
+      }
+    } catch (error) {
+      handleCliError(error, opts.json);
+    }
+  });
+
+brokerCmd
+  .command("status")
+  .description("Show installation broker status")
+  .option("--json", "machine-readable output", false)
+  .action(async (opts: { json: boolean }) => {
+    const { installationRuntime } = await import("../broker/daemon.js");
+    const runtime = installationRuntime();
+    if (!runtime) {
+      if (opts.json) say(JSON.stringify({ ok: true, running: false }));
+      else say("Broker is not running. Use `c2c broker start`.");
+      return;
+    }
+    const info = await adminFetch<AdminInfo & { installationId?: string; workspaceCount?: number; activeSessions?: number }>(
+      runtime,
+      "GET",
+      "/admin/info"
+    );
+    if (opts.json) {
+      say(JSON.stringify({ ok: true, running: true, ...info }));
+      return;
+    }
+    check(`Installation: ${info.installationId}`);
+    check(`Broker: running (port ${info.port})`);
+    if (info.tunnel.running && info.tunnel.url) check(`Connector URL: ${info.tunnel.url}/mcp`);
+    else say("· Public endpoint: not enabled");
+    check(`Workspaces registered: ${info.workspaceCount ?? 0}`);
+    check(`Active Codex sessions: ${info.activeSessions ?? 0}`);
+  });
+
+brokerCmd
+  .command("stop")
+  .description("Stop the installation broker")
+  .action(async () => {
+    const { stopBroker } = await import("../broker/daemon.js");
+    const stopped = await stopBroker();
+    if (stopped) check("Broker stopped");
+    else say("Broker is not running.");
+  });
+
+program
+  .command("use")
+  .description("Register a project workspace with the C2C installation (defaults to current directory)")
+  .option("-w, --workspace <path>")
+  .option("--name <name>", "display name for the workspace")
+  .option("--json", "machine-readable output", false)
+  .action(async (opts: { workspace?: string; name?: string; json: boolean }) => {
+    try {
+      const { ensureBroker } = await import("../broker/daemon.js");
+      const root = resolveWorkspace(opts.workspace);
+      const runtime = await ensureBroker();
+      const registration = await adminFetch<{ id: string; displayName: string }>(
+        runtime,
+        "POST",
+        "/admin/workspace",
+        60_000,
+        { root, displayName: opts.name }
+      );
+      if (opts.json) {
+        say(JSON.stringify({ ok: true, ...registration, root }));
+        return;
+      }
+      check(`Registered workspace "${registration.displayName}" (${registration.id})`);
+      say("Claude can now inspect it — no connector changes needed.");
+    } catch (error) {
+      handleCliError(error, opts.json);
+    }
+  });
+
+program
+  .command("workspaces")
+  .description("List workspaces registered with the C2C installation")
+  .option("--json", "machine-readable output", false)
+  .action(async (opts: { json: boolean }) => {
+    try {
+      const { ensureBroker } = await import("../broker/daemon.js");
+      const runtime = await ensureBroker();
+      const { workspaces } = await adminFetch<{ workspaces: { id: string; displayName: string }[] }>(
+        runtime,
+        "GET",
+        "/admin/workspaces"
+      );
+      if (opts.json) {
+        say(JSON.stringify({ ok: true, workspaces }));
+        return;
+      }
+      if (workspaces.length === 0) {
+        say("No workspaces registered yet. Use `c2c use` inside a project.");
+        return;
+      }
+      for (const workspace of workspaces) {
+        check(`${workspace.displayName} — ${workspace.id}`);
+      }
+    } catch (error) {
+      handleCliError(error, opts.json);
+    }
+  });
+
 function handleCliError(error: unknown, json: boolean): void {
   const message = error instanceof Error ? error.message : String(error);
   if (json) {
