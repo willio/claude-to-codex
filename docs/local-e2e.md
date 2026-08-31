@@ -16,7 +16,7 @@ requires a human login.
 ## Broker-first procedure (current)
 
 1. **Prerequisites**: Node.js ≥ 20, git, `cloudflared`.
-2. From the first project: `c2c setup` (or `c2c broker start` + `c2c use` +
+2. From the first project: `c2c setup --mode quick` (or `c2c setup --mode named --zone <domain>`; or `c2c broker start` + `c2c use` +
    `c2c broker pair` when splitting steps). This starts the installation
    broker, establishes a public HTTPS endpoint (Quick Tunnel by default), registers
    the workspace, and prints the stable `/mcp` URL plus a pairing code when the

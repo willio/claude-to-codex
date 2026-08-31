@@ -116,19 +116,13 @@ a domain.
 
 ## Slices
 
-1. **Domain model + tests** — installation identity, WorkspaceRegistry,
-   SessionRegistry; no behavior change to existing paths. ← this PR
-2. **Registry-backed broker MCP resolution** — broker serves the registry;
-   tools take the opaque `workspace` argument; fail-closed semantics.
-3. **Session lifecycle in CLI** — start/stop/doctor create/heartbeat/end
-   sessions; revocation.
-4. **MCP integration** — `list_workspaces` E2E, cross-workspace isolation,
-   invented-id and removed-workspace cases.
-5. **OAuth installation-level identity migration** (schema detection,
-   legacy read, explicit upgrade, aliases).
-6. **CLI lifecycle + stable connector UX** (broker as default daemon,
-   named-tunnel-first setup flow).
-7. **E2E multi-project validation + docs + threat-model walkthrough.**
+1. **Domain model + tests** — done (`installation.json`, registry, sessions).
+2. **Registry-backed broker MCP resolution** — done (opaque `workspace` arg).
+3. **Session lifecycle in CLI** — done (`c2c use`, `c2c use --end`, heartbeats).
+4. **MCP integration** — done (`tests/broker.test.ts`, `tests/mcp-integration.test.ts`).
+5. **OAuth installation migration** — done (`c2c broker migrate-auth`, broker OAuth tests).
+6. **CLI lifecycle + stable connector UX** — done (`c2c setup --mode`, `broker tunnel`).
+7. **E2E multi-project validation + docs** — automated in broker tests; human Claude Web validation remains manual (see `docs/local-e2e.md`).
 
 ## Threat model answers
 
