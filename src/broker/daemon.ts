@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { ensureDir, getStateDir } from "../config/paths.js";
 import { adminFetch } from "../process/daemon.js";
 import { findLiveBridge, probeBridge, readRuntimeState, type RuntimeState } from "../bridge/runtime.js";
+import { Workspace } from "../workspace/manager.js";
 import { loadOrCreateInstallation } from "../workspaces/installation.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -95,4 +96,109 @@ export async function ensureBrokerTunnel(runtime: RuntimeState): Promise<string>
   );
   if (!result.url) throw new Error(result.message ?? "Tunnel start failed");
   return result.url;
+}
+
+// ---- Local Codex session binding ---------------------------------------
+
+export interface LocalSessionBinding {
+  sessionId: string;
+  workspaceId: string;
+  refreshedAt: string;
+}
+
+function bindingFile(stateDir: string, workspaceId: string): string {
+  return path.join(ensureDir(path.join(stateDir, "agent-sessions")), `${workspaceId}.json`);
+}
+
+function loadBinding(stateDir: string, workspaceId: string): LocalSessionBinding | null {
+  try {
+    const data = JSON.parse(fs.readFileSync(bindingFile(stateDir, workspaceId), "utf8")) as LocalSessionBinding;
+    return data.sessionId ? data : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveBinding(stateDir: string, binding: LocalSessionBinding, workspaceKey: string): void {
+  const file = bindingFile(stateDir, workspaceKey);
+  ensureDir(path.dirname(file));
+  fs.writeFileSync(file, JSON.stringify(binding, null, 2), { mode: 0o600 });
+}
+
+/**
+ * Register the workspace (idempotent) and keep a live Codex session bound to
+ * it. The binding survives in the state dir so later commands (record,
+ * doctor) can heartbeat the same session. Fails closed if the broker is
+ * unreachable.
+ */
+export async function ensureWorkspaceSession(
+  runtime: RuntimeState,
+  workspaceRoot: string,
+  opts: { stateDir?: string; displayName?: string; pid?: number } = {}
+): Promise<{ workspaceId: string; displayName: string; sessionId: string; created: boolean }> {
+  const stateDir = opts.stateDir ?? getStateDir();
+  // Binding files are keyed by the workspace's stable root-hash id, so they
+  // survive display-name changes; the registry id lives inside the binding.
+  const workspaceKey = new Workspace(workspaceRoot).id;
+  const registration = await adminFetch<{ id: string; displayName: string }>(
+    runtime,
+    "POST",
+    "/admin/workspace",
+    60_000,
+    { root: workspaceRoot, displayName: opts.displayName }
+  );
+
+  const existing = loadBinding(stateDir, workspaceKey);
+  if (existing && existing.workspaceId === registration.id) {
+    try {
+      await adminFetch(runtime, "POST", "/admin/session/heartbeat", 10_000, {
+        sessionId: existing.sessionId,
+      });
+      return {
+        workspaceId: registration.id,
+        displayName: registration.displayName,
+        sessionId: existing.sessionId,
+        created: false,
+      };
+    } catch {
+      // expired or cleared: fall through and create a fresh session
+    }
+  }
+
+  const session = await adminFetch<{ sessionId: string }>(runtime, "POST", "/admin/session", 10_000, {
+    workspaceId: registration.id,
+    pid: opts.pid,
+  });
+  saveBinding(stateDir, {
+    sessionId: session.sessionId,
+    workspaceId: registration.id,
+    refreshedAt: new Date().toISOString(),
+  }, workspaceKey);
+  return {
+    workspaceId: registration.id,
+    displayName: registration.displayName,
+    sessionId: session.sessionId,
+    created: true,
+  };
+}
+
+/** Heartbeat the stored session for a workspace, if one is bound. */
+export async function heartbeatWorkspaceSession(
+  workspaceRoot: string,
+  opts: { stateDir?: string } = {}
+): Promise<boolean> {
+  const stateDir = opts.stateDir ?? getStateDir();
+  const runtime = installationRuntime(stateDir);
+  if (!runtime) return false;
+  const workspaceKey = new Workspace(workspaceRoot).id;
+  const binding = loadBinding(stateDir, workspaceKey);
+  if (!binding) return false;
+  try {
+    await adminFetch(runtime, "POST", "/admin/session/heartbeat", 10_000, {
+      sessionId: binding.sessionId,
+    });
+    return true;
+  } catch {
+    return false;
+  }
 }

@@ -120,7 +120,11 @@ export class WorkspaceRegistry {
    */
   register(opts: { root: string; displayName?: string }): WorkspaceRegistration {
     const canonicalRoot = canonicalizeRoot(opts.root);
-    const displayName = opts.displayName?.trim() || path.basename(canonicalRoot);
+    const existingByRoot = this.getByRoot(canonicalRoot);
+    // An omitted name keeps whatever the workspace is already registered as,
+    // so idempotent re-registration never renames a custom-named workspace.
+    const displayName =
+      opts.displayName?.trim() || existingByRoot?.displayName || path.basename(canonicalRoot);
     const id = workspaceIdFor(canonicalRoot, displayName);
     const existing = this.entries.get(id);
     const now = new Date().toISOString();

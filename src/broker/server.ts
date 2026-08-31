@@ -244,6 +244,50 @@ export async function startBroker(opts: BrokerOptions = {}): Promise<Broker> {
     res.json({ removed: registry.remove(body.id) });
   });
 
+  app.post("/admin/session", adminGuard, express.json(), (req, res) => {
+    const body = (req.body ?? {}) as { workspaceId?: string; pid?: number };
+    if (!body.workspaceId) {
+      res.status(400).json({ error: "invalid_request", message: "workspaceId is required" });
+      return;
+    }
+    try {
+      res.json(sessions.create(body.workspaceId, { pid: body.pid }));
+    } catch (error) {
+      if (error instanceof RegistryError) {
+        res.status(404).json({ error: error.code, message: error.message });
+        return;
+      }
+      throw error;
+    }
+  });
+
+  app.post("/admin/session/heartbeat", adminGuard, express.json(), (req, res) => {
+    const body = (req.body ?? {}) as { sessionId?: string };
+    if (!body.sessionId) {
+      res.status(400).json({ error: "invalid_request", message: "sessionId is required" });
+      return;
+    }
+    const session = sessions.touch(body.sessionId);
+    if (!session) {
+      res.status(404).json({ error: "UNKNOWN_SESSION", message: "Session expired or unknown" });
+      return;
+    }
+    res.json(session);
+  });
+
+  app.post("/admin/session/end", adminGuard, express.json(), (req, res) => {
+    const body = (req.body ?? {}) as { sessionId?: string };
+    if (!body.sessionId) {
+      res.status(400).json({ error: "invalid_request", message: "sessionId is required" });
+      return;
+    }
+    res.json({ ended: sessions.end(body.sessionId) });
+  });
+
+  app.get("/admin/sessions", adminGuard, (_req, res) => {
+    res.json({ sessions: sessions.list() });
+  });
+
   app.post("/admin/tunnel/start", adminGuard, (_req, res) => {
     tunnel
       .start(port)
