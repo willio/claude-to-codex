@@ -7,6 +7,10 @@ Use Claude Web as the planning and review brain for Codex coding sessions while 
 
 No Claude API key. No reverse proxy. Claude connects to a secure, OAuth-protected, read-only remote MCP bridge and reads only the workspace data it needs.
 
+## Credits
+
+This project is based on the original idea and architecture of [codex-with-chatgpt](https://github.com/XiaoDuoYa/codex-with-chatgpt) by [@XiaoDuoYa](https://github.com/XiaoDuoYa) — thank you for the idea. It is now an independent implementation, adapted for Claude Web and extended with an installation-level connector that serves multiple Codex workspaces.
+
 ## Why
 
 A Claude subscription can handle planning, reasoning, and review while Codex focuses its execution budget on editing, shell commands, git, tests, and fixes.
@@ -146,7 +150,7 @@ c2c stop
 
 ## Compatibility
 
-This repository is a Claude-focused fork of the original ChatGPT implementation. Compatibility is being removed deliberately rather than by blind renaming.
+This project started as a Claude-focused fork of [codex-with-chatgpt](https://github.com/XiaoDuoYa/codex-with-chatgpt) and is now an independent repository. Compatibility with the original is handled deliberately rather than by blind renaming.
 
 Existing installations that already have a `codex-with-chatgpt` app-state directory continue using it when no `codex-with-claude` directory exists. This prevents silent loss of OAuth, workspace, endpoint, session, and execution state. New installations use `codex-with-claude`.
 
