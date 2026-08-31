@@ -43,7 +43,10 @@ Before starting a Claude-assisted task:
 Use one Claude conversation per workspace when practical.
 
 1. INIT — tell Claude the task and ask it to inspect the workspace through MCP.
-2. PLAN — Claude returns a concise plan; Codex validates it against the repository.
+2. PLAN — when the user says Claude's plan is ready (they copied it in Claude
+   Web), run `c2c plan` to pull the clipboard content, then DISPLAY the plan
+   content in this session before validating it against the repository. Later
+   reference: `c2c plan show --json`; history: `c2c plan list`.
 3. EXECUTED — Codex performs edits/tests locally and records the execution summary.
 4. REVIEW — Claude inspects `git_diff`, `test_status`, relevant files, and execution summaries through MCP.
 5. DONE — Codex resolves review findings and reports the final result to the user.
