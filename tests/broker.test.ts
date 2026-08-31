@@ -123,6 +123,17 @@ describe("broker tool surface", () => {
     expect(flow?.status).toBe("active");
     expect(linkee?.status).toBe("available");
   });
+
+  it("supports concurrent Codex sessions across two workspaces", async () => {
+    broker.sessions.create(flowId);
+    broker.sessions.create(linkeeId);
+    const { workspaces } = await call<{ workspaces: { workspace_id: string; status: string }[] }>(
+      "list_workspaces",
+      {}
+    );
+    expect(workspaces.find((w) => w.workspace_id === flowId)?.status).toBe("active");
+    expect(workspaces.find((w) => w.workspace_id === linkeeId)?.status).toBe("active");
+  });
 });
 
 describe("workspace-scoped reads", () => {
