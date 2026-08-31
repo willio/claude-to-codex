@@ -1,7 +1,17 @@
 # Local E2E validation — Claude Web ⇄ C2C broker
 
 Recorded 2026-08-30 on macOS (arm64), Node v26, cloudflared 2026.8.2.
-Re-verified against the broker-first CLI at commit `993ab81` (2026-08-31).
+Re-verified 2026-08-31 at commit `bd06466` (multi-workspace slices 1–7 complete).
+
+Run the automated checklist:
+
+```bash
+pnpm test:e2e
+```
+
+This executes `tests/local-e2e-broker.test.ts` — OAuth (DCR + PKCE + pairing), two
+workspaces, `list_workspaces`, scoped reads, session status, and sensitive-file
+denial — without a tunnel or Claude Web login.
 
 **Automated protocol result: YES.** A Claude-role MCP client can connect through
 the installation broker, complete OAuth (DCR + PKCE + one-time pairing), call
