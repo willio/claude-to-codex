@@ -58,7 +58,7 @@ New installations should prefer `c2c setup`.
 - **Flaky loopback health probe → duplicate daemon split-brain** (#8): probe
   retry + duplicate-daemon guard.
 - **Quick Tunnel URL churn**: `c2c doctor --fix` can re-establish the endpoint;
-  named tunnels (`c2c broker tunnel --zone <domain>`) are recommended for a
+  named tunnels (`c2c broker tunnel choose --mode named --zone <domain>`) are recommended for a
   stable connector URL.
 
 ## Remaining notes
