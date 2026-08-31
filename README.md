@@ -11,6 +11,8 @@ Use Claude Web to plan, reason, and review. Let Codex execute — connected thro
 - **Workspace-isolated.** Projects are registered locally. Claude sees opaque workspace IDs, not arbitrary filesystem roots, and every file operation is confined to the granted workspace.
 - **Local-first.** Your source code stays on your machine and is exposed only through explicit, read-only MCP requests.
 
+Based on [codex-with-chatgpt](https://github.com/XiaoDuoYa/codex-with-chatgpt).
+
 ## How it works
 
 ```text
@@ -208,7 +210,7 @@ docs/             architecture, protocol, security and migration
 
 ## Credits
 
-Codex with Claude builds on the original idea and architecture of `codex-with-chatgpt` by XiaoDuoYa.
+Codex with Claude builds on the original idea and architecture of [codex-with-chatgpt](https://github.com/XiaoDuoYa/codex-with-chatgpt) by [@XiaoDuoYa](https://github.com/XiaoDuoYa).
 
 The project has since diverged into an independent Claude Web implementation, while preserving attribution to the upstream work and its MIT copyright in [LICENSE](LICENSE).
 
