@@ -264,6 +264,9 @@ describe("broker admin API over HTTP", () => {
     expect(registration.displayName).toBe("AdminWs");
     expect(broker.registry.get(registration.id)).not.toBeNull();
 
+    const session = broker.sessions.create(registration.id);
+    expect(broker.sessions.resolve(session.sessionId)).not.toBeNull();
+
     const remove = await fetch(`http://127.0.0.1:${broker.port}/admin/workspace/remove`, {
       method: "POST",
       headers: {
@@ -273,7 +276,41 @@ describe("broker admin API over HTTP", () => {
       body: JSON.stringify({ id: registration.id }),
     });
     expect(remove.status).toBe(200);
+    const body = (await remove.json()) as { removed: boolean; sessionsEnded: number };
+    expect(body.removed).toBe(true);
+    expect(body.sessionsEnded).toBe(1);
     expect(broker.registry.get(registration.id)).toBeNull();
+    expect(broker.sessions.resolve(session.sessionId)).toBeNull();
+  });
+
+  it("ends a session via /admin/session/end and clears active status", async () => {
+    const tempRoot = makeTmpDir("admin-session-end");
+    write(tempRoot, "hello.txt", "hello");
+    const registration = broker.registry.register({ root: tempRoot, displayName: "EndMe" });
+    const session = broker.sessions.create(registration.id);
+
+    const { workspaces: active } = await call<{ workspaces: { workspace_id: string; status: string }[] }>(
+      "list_workspaces",
+      {}
+    );
+    expect(active.find((w) => w.workspace_id === registration.id)?.status).toBe("active");
+
+    const end = await fetch(`http://127.0.0.1:${broker.port}/admin/session/end`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${broker.adminToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ sessionId: session.sessionId }),
+    });
+    expect(end.status).toBe(200);
+    expect(broker.sessions.resolve(session.sessionId)).toBeNull();
+
+    const { workspaces: after } = await call<{ workspaces: { workspace_id: string; status: string }[] }>(
+      "list_workspaces",
+      {}
+    );
+    expect(after.find((w) => w.workspace_id === registration.id)?.status).toBe("available");
   });
 });
 

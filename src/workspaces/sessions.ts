@@ -114,6 +114,15 @@ export class SessionRegistry {
     return true;
   }
 
+  /** End every live session bound to a workspace (e.g. on workspace revocation). */
+  endByWorkspace(workspaceId: string): number {
+    let ended = 0;
+    for (const session of this.listByWorkspace(workspaceId)) {
+      if (this.end(session.sessionId)) ended++;
+    }
+    return ended;
+  }
+
   /** Fail-closed resolution: unknown, ended, or expired sessions → null. */
   resolve(sessionId: string): WorkspaceSession | null {
     const session = this.entries.get(sessionId);
