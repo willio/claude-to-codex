@@ -9,6 +9,8 @@ import { PairingManager } from "../pairing/manager.js";
 import { createMcpServer } from "../mcp/server.js";
 import { createMcpHttpHandler } from "../mcp/http.js";
 import { CloudflaredQuickTunnel } from "../tunnel/cloudflared.js";
+import { CloudflaredNamedTunnel } from "../tunnel/cloudflared-named.js";
+import { namedTunnelBinding, readTunnelState } from "../tunnel/state.js";
 import type { TunnelProvider } from "../tunnel/provider.js";
 import { Logger, nullLogger } from "../logger/index.js";
 import { DEFAULT_HOST, DEFAULT_PORT, getStateDir } from "../config/paths.js";
@@ -117,7 +119,14 @@ export async function startBroker(opts: BrokerOptions = {}): Promise<Broker> {
     file: opts.authStoreFile ?? path.join(stateDir, "auth", `${installation.installationId}.json`),
   });
   const pairing = new PairingManager(installation.installationId, { ttlMs: opts.pairingTtlMs });
-  const tunnel = opts.tunnelProvider ?? new CloudflaredQuickTunnel(logger);
+  // Prefer the installation's named-tunnel binding (stable hostname); fall
+  // back to a Quick Tunnel when no named tunnel has been provisioned yet.
+  const binding = namedTunnelBinding(readTunnelState("installation"));
+  const tunnel =
+    opts.tunnelProvider ??
+    (binding
+      ? new CloudflaredNamedTunnel({ tunnelName: binding.tunnelName, hostname: binding.hostname, logger })
+      : new CloudflaredQuickTunnel(logger));
   const adminToken = `c2c_admin_${randomBytes(24).toString("base64url")}`;
 
   let publicBaseUrl: string | null = null;
