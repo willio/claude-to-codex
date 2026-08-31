@@ -210,7 +210,7 @@ docs/             architecture, protocol, security and migration
 
 ## Credits
 
-Codex with Claude dibangun di atas ide dan arsitektur asli `codex-with-chatgpt` karya XiaoDuoYa.
+Codex with Claude dibangun di atas ide dan arsitektur asli [codex-with-chatgpt](https://github.com/XiaoDuoYa/codex-with-chatgpt) karya [@XiaoDuoYa](https://github.com/XiaoDuoYa).
 
 Project ini kemudian berkembang menjadi implementasi independen untuk Claude Web, dengan tetap menjaga atribusi untuk karya upstream dan copyright MIT-nya di [LICENSE](LICENSE).
 
