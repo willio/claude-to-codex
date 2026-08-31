@@ -245,3 +245,34 @@ describe("single-workspace broker", () => {
     }
   });
 });
+
+describe("broker admin API over HTTP", () => {
+  it("accepts JSON bodies for workspace registration and removal", async () => {
+    const tempRoot = makeTmpDir("admin-ws");
+    write(tempRoot, "hello.txt", "hello");
+
+    const response = await fetch(`http://127.0.0.1:${broker.port}/admin/workspace`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${broker.adminToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ root: tempRoot, displayName: "AdminWs" }),
+    });
+    expect(response.status).toBe(200);
+    const registration = (await response.json()) as { id: string; displayName: string };
+    expect(registration.displayName).toBe("AdminWs");
+    expect(broker.registry.get(registration.id)).not.toBeNull();
+
+    const remove = await fetch(`http://127.0.0.1:${broker.port}/admin/workspace/remove`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${broker.adminToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ id: registration.id }),
+    });
+    expect(remove.status).toBe(200);
+    expect(broker.registry.get(registration.id)).toBeNull();
+  });
+});

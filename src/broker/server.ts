@@ -205,8 +205,8 @@ export async function startBroker(opts: BrokerOptions = {}): Promise<Broker> {
     res.json(info);
   });
 
-  app.post("/admin/workspace", adminGuard, (req, res) => {
-    const body = req.body as { root?: string; displayName?: string };
+  app.post("/admin/workspace", adminGuard, express.json(), (req, res) => {
+    const body = (req.body ?? {}) as { root?: string; displayName?: string };
     if (!body.root) {
       res.status(400).json({ error: "invalid_request", message: "root is required" });
       return;
@@ -226,8 +226,8 @@ export async function startBroker(opts: BrokerOptions = {}): Promise<Broker> {
     res.json({ workspaces: registry.list() });
   });
 
-  app.post("/admin/workspace/remove", adminGuard, (req, res) => {
-    const body = req.body as { id?: string };
+  app.post("/admin/workspace/remove", adminGuard, express.json(), (req, res) => {
+    const body = (req.body ?? {}) as { id?: string };
     if (!body.id) {
       res.status(400).json({ error: "invalid_request", message: "id is required" });
       return;
