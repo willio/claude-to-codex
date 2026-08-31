@@ -1,160 +1,185 @@
 # Codex with Claude
 
-> Claude thinks. Codex works.
-> Claude 负责思考，Codex 负责执行。
+Use Claude Web to plan, reason, and review. Let Codex execute — connected through a secure, read-only MCP bridge.
 
-Use Claude Web as the planning and review brain for Codex coding sessions while Codex retains execution ownership.
+**No Claude API key. No reverse proxy.** Claude connects to an OAuth-protected remote MCP endpoint and reads only the workspace data it needs.
 
-No Claude API key. No reverse proxy. Claude connects to a secure, OAuth-protected, read-only remote MCP bridge and reads only the workspace data it needs.
+- **One connector, many projects.** Connect Claude once. Adding, switching, or closing projects requires no new connector, OAuth flow, or pairing.
+- **Read-only by construction.** Claude gets no write, shell, commit, or execution tools. Codex remains the sole executor and mutator.
+- **Workspace-isolated.** Projects are registered locally. Claude sees opaque workspace IDs, not arbitrary filesystem roots, and every file operation is confined to the granted workspace.
+- **Local-first.** Your source code stays on your machine and is exposed only through explicit, read-only MCP requests.
 
-## Credits
+## How it works
 
-This project is based on the original idea and architecture of [codex-with-chatgpt](https://github.com/XiaoDuoYa/codex-with-chatgpt) by [@XiaoDuoYa](https://github.com/XiaoDuoYa) — thank you for the idea. It is now an independent implementation, adapted for Claude Web and extended with an installation-level connector that serves multiple Codex workspaces.
-
-## Why
-
-A Claude subscription can handle planning, reasoning, and review while Codex focuses its execution budget on editing, shell commands, git, tests, and fixes.
-
-The boundary is deliberate:
-
-- Claude: plan, inspect, review.
-- Codex: edit, execute, test, commit, recover.
-- C2C Bridge: expose read-only workspace and execution context over MCP.
-
-Claude never receives a write-capable MCP tool or a general-purpose command-execution tool.
-
-## Requirements
-
-- Node.js >= 20
-- git
-- `cloudflared` for the public remote-MCP connection
-- Claude Web with custom remote connector support
-
-## Install
-
-```bash
-git clone https://github.com/willio/codex-with-claude.git ~/codex-with-claude
-cd ~/codex-with-claude
-corepack pnpm install
-corepack pnpm build
+```text
+Claude Web (plan · reason · review)
+    │
+    │  OAuth once · one connector
+    ▼
+C2C Broker ─────── stable /mcp endpoint
+    │
+    │  opaque workspace capabilities
+    │
+    ├── Project A   ◄── Codex session
+    ├── Project B   ◄── Codex session
+    └── Project C
+              ▲
+              │  edit · shell · git · tests
+              │
+        Codex (execute · repair)
 ```
 
-Optional: `npm install -g .` puts `c2c` on your PATH everywhere — including GUI-spawned agents such as the Codex desktop app, which only see the system PATH. The CLI needs `node` and, for tunnels, `cloudflared` resolvable from that same PATH.
+Claude inspects code, diffs, git state, and recorded test results through the broker, then gives Codex a plan. Codex is the only component that changes anything.
 
-Install `skill/SKILL.md` as a Codex skill (e.g. copy it to `~/.codex/skills/codex-with-claude/SKILL.md`), then follow its first-time setup workflow.
+Every Claude-facing capability is read-only. Workspaces are registered locally by Codex/C2C and addressed through opaque IDs. Filesystem paths are canonicalized and confined to the granted workspace, while sensitive files such as `.env`, private keys, and credentials are denied.
 
-## First-time setup
+## Quick start
 
-In the project you want to connect, run:
+Requirements: Node.js ≥ 20, `git`, `cloudflared`, and Claude Web with custom connector support.
 
 ```bash
+git clone https://github.com/willio/codex-with-claude.git
+cd codex-with-claude
+pnpm install
+pnpm build
+npm install -g .
+```
+
+Install the Codex skill:
+
+```bash
+mkdir -p ~/.codex/skills/codex-with-claude
+cp skill/SKILL.md ~/.codex/skills/codex-with-claude/
+```
+
+### Connect Claude — once
+
+From your first project:
+
+```bash
+cd ~/Projects/your-project
 c2c setup
 ```
 
-C2C starts the local bridge, establishes the public HTTPS tunnel, and returns an MCP URL plus a one-time pairing code.
+C2C starts the broker and gives you the MCP endpoint and a one-time pairing code.
 
 In Claude Web:
 
-1. Open **Customize > Connectors**.
-2. Add a custom connector using the C2C MCP URL.
-3. Complete OAuth authorization.
-4. Enter the one-time pairing code on the C2C authorization page.
-5. Enable the connector and ask Claude to call `workspace_info` to verify the workspace.
+**Customize → Connectors → Add custom connector**
 
-Timing notes:
+Paste the `/mcp` URL, complete OAuth, and enter the pairing code.
 
-- The pairing page auto-submits the moment a complete code is pasted or typed. Codes are single-use and expire in ~5 minutes; an authorization page expires after ~10 minutes. Mint the code when the page is open (`c2c pair`), not up front — the bundled Codex skill sequences it this way.
-- Connector creation in Claude Web is an explicit user action. The Codex skill prepares and diagnoses the local side; it does not claim to automate Claude's connector UI.
-- Per-project setup is deliberate: authorization is bound to one workspace, so each project gets its own connector. For a stable endpoint use a named Cloudflare Tunnel (`c2c tunnel choose --mode named`); Quick Tunnel URLs change across reboots, which means re-adding the connector.
+Pairing codes expire after approximately five minutes. If necessary, generate another while the authorization page is open:
 
-## Workflow
-
-The coordination loop is intentionally small:
-
-```text
-INIT -> PLAN -> EXECUTED -> REVIEW -> DONE
+```bash
+c2c pair
 ```
 
-Claude retrieves source, diffs, git state, and recorded execution results through MCP instead of requiring Codex to paste large file bodies or logs into the conversation.
+That's the only Claude-side setup.
 
-Available read-only MCP tools:
+### Add another project
 
-- `workspace_info`
-- `list_directory`
-- `read_file`
-- `search_workspace`
-- `git_status`
-- `git_diff`
-- `test_status`
-- `execution_summary`
+```bash
+cd ~/Projects/another-project
+codex
+```
 
-`test_status` and `execution_summary` read recorded Codex results. They do not execute commands.
+The Codex skill registers the workspace with the existing C2C installation. No new Claude connector, OAuth authorization, or pairing is required.
 
-## Architecture
+For a permanent connector URL, use a named Cloudflare tunnel:
+
+```bash
+c2c tunnel choose --mode named --zone <domain>
+```
+
+A stable endpoint is recommended for the single connector you keep in Claude. Quick Tunnels remain useful for development and temporary testing.
+
+## The loop
 
 ```text
-             +---------------------------+
-             |        Claude Web         |
-             |   Plan / Reason / Review  |
-             +-------------+-------------+
-                           |
-                    remote MCP + OAuth
-                           |
-                           v
-             +---------------------------+
-             |        C2C Bridge         |
-             |      read-only MCP        |
-             | OAuth + one-time pairing  |
-             |   Cloudflare tunnel       |
-             +-------------+-------------+
-                           |
-                        read-only
-                           v
-             +---------------------------+
-             |      Local Workspace      |
-             +-------------^-------------+
-                           |
-                    edit / git / shell
-                           |
-             +-------------+-------------+
-             |       Codex Harness       |
-             |  execute / test / repair  |
-             +---------------------------+
+INIT → PLAN → EXECUTED → REVIEW → DONE
 ```
+
+Claude retrieves the context it needs through MCP rather than requiring files and diffs to be pasted into the conversation.
+
+Codex executes the plan and records the result:
+
+```bash
+c2c record --task <id> --iteration <n> --tests "27 passed"
+```
+
+Claude can then independently inspect the resulting diff, git state, and recorded outcome before concluding the task.
+
+### MCP tools
+
+All tools are read-only:
+
+```text
+list_workspaces
+workspace_info
+list_directory
+read_file
+search_workspace
+git_status
+git_diff
+test_status
+execution_summary
+```
+
+`test_status` and `execution_summary` only read results previously recorded by Codex. They cannot run commands or tests.
 
 ## Security model
 
-- **Read-only by construction:** the MCP server has no file-write, delete, shell, commit, or arbitrary execution tools.
-- **Workspace isolation:** authorization is bound to one workspace and path containment rejects traversal, absolute-path, and symlink escapes.
-- **Sensitive-file policy:** `.env*`, keys, SSH material, and credentials are denied by default; `.env.example` remains readable and `.c2cignore` can add exclusions.
-- **OAuth-protected public endpoint:** knowing the tunnel URL does not grant workspace access.
-- **Short-lived pairing:** the browser sees a one-time pairing code rather than a long-lived local credential.
-- **Untrusted workspace content:** instructions found in source files are data, not authority to expand Claude's permissions.
+**No mutation surface.** The MCP server exposes no file-write, shell, execution, commit, or other mutation tools. Codex retains exclusive execution authority.
 
-See [docs/security.md](docs/security.md) for the full threat model.
+**Installation-level authorization.** Claude authorizes one C2C installation rather than individual projects. OAuth uses Dynamic Client Registration, PKCE with S256, short-lived pairing codes, refresh-token rotation, and revocation.
+
+**Workspace capabilities.** Claude can address only workspaces registered locally with C2C. Unknown, missing, or revoked workspace IDs fail closed. Path traversal and symlink escapes are rejected through canonical-path containment.
+
+**No arbitrary filesystem roots.** Claude works with opaque workspace identities. It cannot nominate another directory on the machine and turn it into a workspace.
+
+**Untrusted repository content.** Source files, documentation, issues, and other workspace content are treated as data, never as authorization.
+
+**Short-lived pairing.** Pairing establishes authorization without exposing a long-lived credential in the browser.
+
+See [docs/security.md](docs/security.md) for the threat model, [docs/multi-workspace.md](docs/multi-workspace.md) for the workspace architecture, and [docs/local-e2e.md](docs/local-e2e.md) for end-to-end validation.
 
 ## CLI
 
-```bash
+```text
 c2c setup
 c2c start
 c2c status
 c2c doctor
 c2c pair
 c2c unpair
+c2c record
+c2c tunnel
+c2c session
 c2c logs
+c2c sandbox-allow
 c2c stop
 ```
 
-`c2c doctor` diagnoses the local bridge, tunnel, sandbox configuration, and connector endpoint state. If a temporary tunnel URL changes, it identifies the affected workspace connector so it can be re-added in Claude. Bridge detection retries flaky loopback health probes and refuses to start a duplicate daemon for a workspace that is already served, so a missed probe cannot split the CLI from the tunnel-bearing bridge.
+Every command supports `--json` for tooling.
+
+`c2c doctor` diagnoses and repairs the local side where possible. If the public endpoint changes and Claude requires the connector to be re-added, it reports the required action explicitly.
+
+For compatibility, `doctor --json` exposes the canonical `connectorRepair` field while retaining `chatgptRepair` as a deprecated alias.
 
 ## Compatibility
 
-This project started as a Claude-focused fork of [codex-with-chatgpt](https://github.com/XiaoDuoYa/codex-with-chatgpt) and is now an independent repository. Compatibility with the original is handled deliberately rather than by blind renaming.
+Codex with Claude began from the ideas and architecture of `codex-with-chatgpt` and has since evolved into an independent implementation.
 
-Existing installations that already have a `codex-with-chatgpt` app-state directory continue using it when no `codex-with-claude` directory exists. This prevents silent loss of OAuth, workspace, endpoint, session, and execution state. New installations use `codex-with-claude`.
+The current architecture uses one installation-level Claude connector serving multiple locally registered Codex workspaces.
 
-Some deprecated internal constants and the machine-readable `chatgptRepair` doctor field (now canonical as `connectorRepair`) retain their historical ChatGPT names temporarily so existing consumers do not break. See [docs/migration.md](docs/migration.md).
+Compatibility with earlier C2C installations is intentionally non-destructive:
+
+- Existing per-project bridges remain supported during migration.
+- Legacy `codex-with-chatgpt` state directories can be adopted.
+- Compatibility fields and aliases are removed only through explicit, versioned changes.
+
+See [docs/migration.md](docs/migration.md).
 
 ## Development
 
@@ -165,33 +190,27 @@ pnpm test
 pnpm build
 ```
 
-CI runs all three validation steps after a frozen-lockfile install.
+CI runs typecheck, tests, and build on every push.
 
-Project layout:
+Key source areas:
 
 ```text
-src/
-  auth/       OAuth 2.1, PKCE, DCR, refresh rotation, revocation
-  bridge/     loopback HTTP server and admin API
-  cli/        c2c CLI
-  execution/  recorded execution results for review
-  mcp/        read-only MCP tools
-  pairing/    one-time pairing codes
-  process/    daemon lifecycle
-  tunnel/     Cloudflare Quick/Named Tunnel support
-  workspace/  containment, sensitive-file policy, search, git
-skill/        Codex skill
-tests/        unit and integration tests
-docs/         architecture, protocol, security, migration, troubleshooting, local-e2e
+src/broker/       installation endpoint and routing
+src/mcp/          read-only MCP tools
+src/auth/         OAuth 2.1
+src/workspaces/   workspace registry and sessions
+src/bridge/       per-project bridge compatibility
+src/cli/          C2C command-line interface
+docs/             architecture, protocol, security and migration
 ```
 
-## Status
+## Credits
 
-The Claude adaptation is complete and end-to-end validated on macOS: Claude-native connector endpoints, OAuth presentation and an auto-submitting pairing page, a Claude-native English CLI with a canonical `connectorRepair` doctor field, a Codex skill that prepares locally and pairs on demand, state-directory compatibility, a probe-resilient daemon lifecycle, and CI. The full validated procedure and findings are in [docs/local-e2e.md](docs/local-e2e.md).
+Codex with Claude builds on the original idea and architecture of `codex-with-chatgpt` by XiaoDuoYa.
 
-Machine-readable aliases such as `chatgptRepair` are retained only where renaming them would break existing consumers; see [docs/migration.md](docs/migration.md).
+The project has since diverged into an independent Claude Web implementation, while preserving attribution to the upstream work and its MIT copyright in [LICENSE](LICENSE).
 
-Unofficial community project. Not affiliated with or endorsed by Anthropic or OpenAI.
+Codex with Claude is an unofficial community project and is not affiliated with or endorsed by Anthropic or OpenAI.
 
 ## License
 
