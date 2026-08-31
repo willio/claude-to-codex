@@ -73,21 +73,25 @@ export async function adminFetch<T = unknown>(
   runtime: RuntimeState,
   method: "GET" | "POST",
   route: string,
-  timeoutMs = 60_000
+  timeoutMs = 60_000,
+  body?: unknown
 ): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
+    const headers: Record<string, string> = { Authorization: `Bearer ${runtime.adminToken}` };
+    if (body !== undefined) headers["content-type"] = "application/json";
     const response = await fetch(`http://127.0.0.1:${runtime.port}${route}`, {
       method,
-      headers: { Authorization: `Bearer ${runtime.adminToken}` },
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
       signal: controller.signal,
     });
-    const body = (await response.json().catch(() => ({}))) as T & { message?: string };
+    const parsed = (await response.json().catch(() => ({}))) as T & { message?: string };
     if (!response.ok) {
-      throw new Error((body as { message?: string }).message ?? `Admin request failed (${response.status})`);
+      throw new Error((parsed as { message?: string }).message ?? `Admin request failed (${response.status})`);
     }
-    return body;
+    return parsed;
   } finally {
     clearTimeout(timer);
   }
