@@ -43,8 +43,13 @@ corepack pnpm build
 运行：
 
 ```bash
-c2c setup
+c2c setup --mode quick
 ```
+
+首次运行需选择公网端点暴露方式：
+
+- `c2c setup --mode quick` — 临时 Quick Tunnel（无需账号）
+- `c2c setup --mode named --zone example.com` — 稳定主机名（Cloudflare）
 
 C2C 会启动安装级 Broker、建立公网 HTTPS Tunnel、注册当前工作区，并在尚未授权时返回 MCP 地址和一次性配对码。
 
@@ -58,7 +63,7 @@ C2C 会启动安装级 Broker、建立公网 HTTPS Tunnel、注册当前工作�
 
 在 Claude 中添加 Connector 是明确的用户操作。Codex Skill 会准备和诊断本地端，但不会假装可以自动操作 Claude 的 Connector UI。
 
-默认可以使用 Cloudflare Quick Tunnel；其公网地址在重启后可能改变。如果需要稳定地址，可以配置 Named Tunnel。
+默认可以使用 Cloudflare Quick Tunnel；其公网地址在重启后可能改变。如果需要稳定地址，运行 `c2c broker tunnel choose --mode named --zone <domain>`。
 
 ## 工作流程
 
