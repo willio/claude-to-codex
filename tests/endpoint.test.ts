@@ -26,7 +26,7 @@ describe("connectorAction", () => {
   it("updates when the old address was reclaimed", () => {
     expect(connectorAction("https://old.trycloudflare.com/mcp", "https://new.trycloudflare.com/mcp")).toBe("update");
     expect(reclaimUserMessage("Codex with Claude")).toContain("Claude");
-    expect(reclaimUserMessage("Codex with Claude")).toContain("移除");
+    expect(reclaimUserMessage("Codex with Claude")).toContain("remove");
   });
 
   it("does nothing without a next URL", () => {
