@@ -1,6 +1,6 @@
 # Codex with Claude
 
-[English](README.md) | [简体中文](README.zh-CN.md) | **Bahasa Indonesia**
+[English](README.md) | **Bahasa Indonesia** | [简体中文](README.zh-CN.md)
 
 **Claude yang mikir. Codex jadi bekerja.**
 

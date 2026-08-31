@@ -1,6 +1,6 @@
 # Codex with Claude
 
-**English** | [简体中文](README.zh-CN.md) | [Bahasa Indonesia](README.id.md)
+**English** | [Bahasa Indonesia](README.id.md) | [简体中文](README.zh-CN.md)
 
 Use Claude Web to plan, reason, and review. Let Codex execute — connected through a secure, read-only MCP bridge.
 
