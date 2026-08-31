@@ -1,5 +1,7 @@
 # Codex with Claude
 
+**English** | [简体中文](README.zh-CN.md) | [Bahasa Indonesia](README.id.md)
+
 Use Claude Web to plan, reason, and review. Let Codex execute — connected through a secure, read-only MCP bridge.
 
 **No Claude API key. No reverse proxy.** Claude connects to an OAuth-protected remote MCP endpoint and reads only the workspace data it needs.
