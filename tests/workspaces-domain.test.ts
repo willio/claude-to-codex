@@ -201,6 +201,21 @@ describe("session registry", () => {
     expect(reloaded.resolve(b.sessionId)?.workspaceId).toBe(linkee.id);
   });
 
+  it("ends every session for a workspace via endByWorkspace", () => {
+    const stateDir = isolateStateDir();
+    const workspaces = WorkspaceRegistry.load(stateDir);
+    const sessions = SessionRegistry.load(stateDir, { workspaces });
+    const flow = workspaces.register({ root: makeRoot("flow") });
+    const linkee = workspaces.register({ root: makeRoot("linkee") });
+    sessions.create(flow.id);
+    sessions.create(flow.id);
+    sessions.create(linkee.id);
+
+    expect(sessions.endByWorkspace(flow.id)).toBe(2);
+    expect(sessions.listByWorkspace(flow.id)).toHaveLength(0);
+    expect(sessions.listByWorkspace(linkee.id)).toHaveLength(1);
+  });
+
   it("drops sessions whose workspace was revoked", () => {
     const stateDir = isolateStateDir();
     const workspaces = WorkspaceRegistry.load(stateDir);

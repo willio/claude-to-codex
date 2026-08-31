@@ -90,7 +90,7 @@ describe("authorization + token flow", () => {
   it("shows the registered Claude client on the pairing page", async () => {
     const clientId = await registerClient("Claude"); const { challenge } = pkceVerifierAndChallenge();
     const response = await fetch(authorizationUrl(clientId, challenge), { redirect: "manual" }); const html = await response.text();
-    expect(response.status).toBe(200); expect(html).toContain("Claude is requesting access"); expect(html).not.toContain("ChatGPT is requesting access");
+    expect(response.status).toBe(200); expect(html).toContain("Claude is requesting read-only access"); expect(html).not.toContain("ChatGPT is requesting access");
   });
 
   it("escapes the registered client name", async () => {
@@ -102,7 +102,7 @@ describe("authorization + token flow", () => {
   it("rejects a wrong pairing code", async () => {
     const clientId = await registerClient(); const { challenge } = pkceVerifierAndChallenge(); bridge.pairing.create();
     const result = await authorizeWithPairing(clientId, challenge, "AAAA-AAAA");
-    expect(result.code).toBeNull(); expect(result.status).toBe(401); expect(result.page).toContain("Incorrect pairing code"); expect(result.page).toContain("Claude is requesting access");
+    expect(result.code).toBeNull(); expect(result.status).toBe(401); expect(result.page).toContain("Incorrect pairing code"); expect(result.page).toContain("Claude is requesting read-only access");
   });
 
   it("escapes the workspace name in the pairing page", async () => {

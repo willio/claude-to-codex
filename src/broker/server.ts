@@ -247,7 +247,9 @@ export async function startBroker(opts: BrokerOptions = {}): Promise<Broker> {
       res.status(400).json({ error: "invalid_request", message: "id is required" });
       return;
     }
-    res.json({ removed: registry.remove(body.id) });
+    const removed = registry.remove(body.id);
+    const sessionsEnded = removed ? sessions.endByWorkspace(body.id) : 0;
+    res.json({ removed, sessionsEnded });
   });
 
   app.post("/admin/session", adminGuard, express.json(), (req, res) => {
