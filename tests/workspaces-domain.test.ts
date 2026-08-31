@@ -201,3 +201,37 @@ describe("session registry", () => {
     expect(sessions.resolve(session.sessionId)?.workspaceId).toBe(ws.id);
   });
 });
+
+describe("state dir precedence", () => {
+  it("prefers ~/.c2c/state once the installation home exists", async () => {
+    const { getStateDir, getC2cHome } = await import("../src/config/paths.js");
+    const home = makeTmpDir("c2c-home");
+    delete process.env.C2C_STATE_DIR;
+    process.env.C2C_HOME = home;
+    try {
+      // no state dir yet -> falls through to the OS-convention location
+      expect(getStateDir()).not.toBe(path.join(home, "state"));
+      // once created -> the installation state wins
+      fs.mkdirSync(path.join(home, "state"), { recursive: true });
+      expect(getStateDir()).toBe(path.join(home, "state"));
+      expect(getC2cHome()).toBe(home);
+    } finally {
+      delete process.env.C2C_HOME;
+    }
+  });
+
+  it("keeps C2C_STATE_DIR as the strongest override", async () => {
+    const { getStateDir } = await import("../src/config/paths.js");
+    const home = makeTmpDir("c2c-home-2");
+    fs.mkdirSync(path.join(home, "state"), { recursive: true });
+    const scratch = makeTmpDir("c2c-scratch");
+    process.env.C2C_HOME = home;
+    process.env.C2C_STATE_DIR = scratch;
+    try {
+      expect(getStateDir()).toBe(scratch);
+    } finally {
+      delete process.env.C2C_HOME;
+      delete process.env.C2C_STATE_DIR;
+    }
+  });
+});
