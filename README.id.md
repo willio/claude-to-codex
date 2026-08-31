@@ -42,7 +42,7 @@ Semua capability yang tersedia untuk Claude bersifat read-only. Workspace didaft
 Persyaratan: Node.js ≥ 20, `git`, `cloudflared`, dan Claude Web dengan dukungan custom connector.
 
 ```bash
-git clone https://github.com/willio/codex-with-claude.git
+git clone https://github.com/willio/claude-to-codex.git
 cd codex-with-claude
 pnpm install
 pnpm build

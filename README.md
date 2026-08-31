@@ -42,7 +42,7 @@ Every Claude-facing capability is read-only. Workspaces are registered locally b
 Requirements: Node.js ≥ 20, `git`, `cloudflared`, and Claude Web with custom connector support.
 
 ```bash
-git clone https://github.com/willio/codex-with-claude.git
+git clone https://github.com/willio/claude-to-codex.git
 cd codex-with-claude
 pnpm install
 pnpm build
