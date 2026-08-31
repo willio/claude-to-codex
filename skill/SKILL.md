@@ -20,7 +20,7 @@ Claude thinks. Codex works.
 
 1. Ensure Node.js >= 20 and `cloudflared` are installed.
 2. Run `c2c sandbox-allow --json`.
-3. From the first project, run `c2c setup --json`. This starts the installation broker, establishes the public endpoint, registers the workspace, and returns `mcpUrl` plus a pairing code when the installation is not yet authorized.
+3. From the first project, run `c2c setup --mode quick --json` (or `c2c setup --mode named --zone <domain> --json` for a stable hostname). This starts the installation broker, establishes the public endpoint, registers the workspace, and returns `mcpUrl` plus a pairing code when the installation is not yet authorized. On first run without `--mode`, setup explains the quick vs named choice instead of silently starting a Quick Tunnel.
 4. In Claude Web open Customize > Connectors, add ONE custom connector using `mcpUrl`, and connect it with OAuth.
 5. When the C2C authorization page is open, enter the pairing code from setup (or run `c2c broker pair --json` / `c2c pair --json` for a fresh code). Mint at the moment of need; codes are single-use and expire in ~5 minutes.
 6. In Claude, enable the connector and ask it to call `list_workspaces`. Confirm the installation responds.

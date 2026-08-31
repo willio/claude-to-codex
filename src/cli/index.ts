@@ -225,8 +225,18 @@ program
   .description("Set up this workspace with the C2C installation: broker, public endpoint, registration")
   .option("-w, --workspace <path>")
   .option("--no-tunnel", "local only (no public endpoint)")
+  .option("--mode <mode>", "public endpoint: quick or named (required on first setup)")
+  .option("--zone <domain>", "Cloudflare zone when --mode named")
+  .option("--hostname <hostname>", "override stable hostname for named mode")
   .option("--json", "machine-readable output", false)
-  .action(async (opts: { workspace?: string; tunnel: boolean; json: boolean }) => {
+  .action(async (opts: {
+    workspace?: string;
+    tunnel: boolean;
+    mode?: string;
+    zone?: string;
+    hostname?: string;
+    json: boolean;
+  }) => {
     const root = resolveWorkspace(opts.workspace);
     try {
       if (!opts.json) {
@@ -236,12 +246,38 @@ program
         say("");
       }
       const sandbox = trySandboxAllow();
-      const { ensureBroker, ensureBrokerTunnel, ensureWorkspaceSession } = await import("../broker/daemon.js");
+      const { ensureBroker, ensureWorkspaceSession } = await import("../broker/daemon.js");
+      const { resolveInstallationTunnel, installationTunnelPayload } = await import("../tunnel/installation.js");
       const runtime = await ensureBroker();
       let mcpUrl: string | null = null;
+      let tunnelChoice: Record<string, unknown> | undefined;
       if (opts.tunnel) {
-        const url = await ensureBrokerTunnel(runtime);
-        mcpUrl = `${url}/mcp`;
+        const mode = opts.mode?.trim().toLowerCase() as "quick" | "named" | undefined;
+        if (mode && mode !== "quick" && mode !== "named") {
+          throw new Error("mode must be quick or named");
+        }
+        const endpoint = await resolveInstallationTunnel(runtime, {
+          mode,
+          zone: opts.zone,
+          hostname: opts.hostname,
+        });
+        tunnelChoice = installationTunnelPayload(opts.zone);
+        if (endpoint.needsChoice) {
+          if (opts.json) {
+            say(JSON.stringify({ ok: false, needsTunnelChoice: true, tunnel: tunnelChoice, message: endpoint.message }));
+            process.exitCode = 1;
+            return;
+          }
+          say(endpoint.userPrompt ?? TUNNEL_CHOICE_PROMPT);
+          say("");
+          say("Then rerun with one of:");
+          say("  c2c setup --mode quick");
+          say("  c2c setup --mode named --zone <your-domain>");
+          process.exitCode = 1;
+          return;
+        }
+        mcpUrl = endpoint.mcpUrl;
+        if (endpoint.fallback && endpoint.message && !opts.json) say(endpoint.message);
       }
       const session = await ensureWorkspaceSession(runtime, root);
       const info = await adminFetch<AdminInfo & { installationId?: string; tokenCount?: number }>(
@@ -271,6 +307,7 @@ program
             pairingCode,
             pairingExpiresAt,
             sandbox,
+            tunnel: tunnelChoice,
           })
         );
         return;
@@ -509,11 +546,16 @@ program
         } else {
           report.endpoint = { ok: false, detail: "not enabled (c2c broker start --tunnel)" };
           if (opts.fix) {
-            const started = await adminFetch<{ url?: string }>(runtime, "POST", "/admin/tunnel/start", 90_000).catch(
-              () => null
-            );
-            if (started?.url) {
-              report.endpoint = { ok: true, detail: `${started.url}/mcp` };
+            const { resolveInstallationTunnel, installationTunnelPayload } = await import("../tunnel/installation.js");
+            const endpoint = await resolveInstallationTunnel(runtime, { allowAutoQuick: true });
+            if (endpoint.needsChoice) {
+              report.endpoint = {
+                ok: false,
+                detail: "tunnel choice required — run `c2c broker tunnel status`",
+              };
+              (report as Record<string, unknown>).tunnelChoice = installationTunnelPayload();
+            } else if (endpoint.url) {
+              report.endpoint = { ok: true, detail: `${endpoint.url}/mcp` };
               results.push("Established the public endpoint");
             }
           }
@@ -1213,15 +1255,44 @@ brokerCmd
   .description("Start (or reuse) the installation broker and its public endpoint")
   .option("--tunnel", "establish the public endpoint if not up", true)
   .option("--no-tunnel", "local only (no public endpoint)")
+  .option("--mode <mode>", "public endpoint: quick or named")
+  .option("--zone <domain>", "Cloudflare zone when --mode named")
+  .option("--hostname <hostname>", "override stable hostname for named mode")
   .option("--json", "machine-readable output", false)
-  .action(async (opts: { tunnel: boolean; json: boolean }) => {
+  .action(async (opts: {
+    tunnel: boolean;
+    mode?: string;
+    zone?: string;
+    hostname?: string;
+    json: boolean;
+  }) => {
     try {
-      const { ensureBroker, ensureBrokerTunnel } = await import("../broker/daemon.js");
+      const { ensureBroker } = await import("../broker/daemon.js");
+      const { resolveInstallationTunnel, installationTunnelPayload } = await import("../tunnel/installation.js");
       const runtime = await ensureBroker();
       let mcpUrl: string | null = null;
       if (opts.tunnel) {
-        const url = await ensureBrokerTunnel(runtime);
-        mcpUrl = `${url}/mcp`;
+        const mode = opts.mode?.trim().toLowerCase() as "quick" | "named" | undefined;
+        if (mode && mode !== "quick" && mode !== "named") {
+          throw new Error("mode must be quick or named");
+        }
+        const endpoint = await resolveInstallationTunnel(runtime, {
+          mode,
+          zone: opts.zone,
+          hostname: opts.hostname,
+        });
+        if (endpoint.needsChoice) {
+          const payload = installationTunnelPayload(opts.zone);
+          if (opts.json) {
+            say(JSON.stringify({ ok: false, needsTunnelChoice: true, tunnel: payload }));
+            process.exitCode = 1;
+            return;
+          }
+          say(endpoint.userPrompt ?? TUNNEL_CHOICE_PROMPT);
+          process.exitCode = 1;
+          return;
+        }
+        mcpUrl = endpoint.mcpUrl;
       }
       if (opts.json) {
         say(JSON.stringify({ ok: true, installationId: runtime.workspaceId, port: runtime.port, mcpUrl }));
@@ -1268,42 +1339,63 @@ brokerCmd
     check(`Active Codex sessions: ${info.activeSessions ?? 0}`);
   });
 
-brokerCmd
+const brokerTunnelCmd = brokerCmd
   .command("tunnel")
-  .description("Attach a stable named Cloudflare Tunnel hostname to the installation broker")
-  .requiredOption("--zone <domain>", "Cloudflare zone that is in your account, e.g. example.com")
-  .option("--hostname <hostname>", "full hostname to route (default: c2c-installation.<zone>)")
+  .description("Choose or inspect the installation broker public endpoint");
+
+brokerTunnelCmd
+  .command("status", { isDefault: true })
+  .description("Show whether the installation still needs a one-time tunnel choice")
+  .option("--zone <domain>", "optional domain preview for a stable hostname")
   .option("--json", "machine-readable output", false)
-  .action(async (opts: { zone: string; hostname?: string; json: boolean }) => {
+  .action(async (opts: { zone?: string; json: boolean }) => {
     try {
-      const { provisionNamedTunnel } = await import("../tunnel/named-provision.js");
-      const result = await provisionNamedTunnel({
-        workspaceId: "installation",
-        workspaceName: "installation",
+      const { installationTunnelPayload } = await import("../tunnel/installation.js");
+      const payload = installationTunnelPayload(opts.zone);
+      if (opts.json) {
+        say(JSON.stringify({ ok: true, ...payload }));
+        return;
+      }
+      if (payload.needsChoice) say(TUNNEL_CHOICE_PROMPT);
+      else if (payload.namedReady) check(`Named tunnel: ${payload.hostname}`);
+      else say("Using a Quick Tunnel (temporary URL).");
+    } catch (error) {
+      handleCliError(error, opts.json);
+    }
+  });
+
+brokerTunnelCmd
+  .command("choose")
+  .description("Remember quick vs named for the installation broker")
+  .requiredOption("--mode <mode>", "quick or named")
+  .option("--zone <domain>", "Cloudflare domain for named mode")
+  .option("--hostname <hostname>", "override stable hostname")
+  .option("--json", "machine-readable output", false)
+  .action(async (opts: { mode: string; zone?: string; hostname?: string; json: boolean }) => {
+    try {
+      const mode = opts.mode.trim().toLowerCase();
+      if (mode !== "quick" && mode !== "named") throw new Error("mode must be quick or named");
+      const { ensureBroker } = await import("../broker/daemon.js");
+      const { resolveInstallationTunnel, installationTunnelPayload } = await import("../tunnel/installation.js");
+      const runtime = await ensureBroker();
+      const endpoint = await resolveInstallationTunnel(runtime, {
+        mode: mode as "quick" | "named",
         zone: opts.zone,
         hostname: opts.hostname,
       });
-      if (result.fallback) {
-        cross(`Named tunnel provisioning failed: ${result.error ?? "unknown error"}`);
-        say("Falling back to the Quick Tunnel for now. Fix the cause and retry.");
-        process.exitCode = 1;
-        return;
-      }
-      // Restart the broker so it picks up the named-tunnel binding.
-      const { stopBroker, ensureBroker, ensureBrokerTunnel } = await import("../broker/daemon.js");
-      await stopBroker();
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      const runtime = await ensureBroker();
-      const url = await ensureBrokerTunnel(runtime);
-      const mcpUrl = `${url}/mcp`;
+      const payload = { ...installationTunnelPayload(opts.zone), ...endpoint };
       if (opts.json) {
-        say(JSON.stringify({ ok: true, hostname: result.state.hostname, mcpUrl }));
+        say(JSON.stringify(payload));
         return;
       }
-      check(`Stable hostname: ${result.state.hostname}`);
-      check(`Connector URL: ${mcpUrl}`);
-      say("");
-      say("This URL survives restarts and reboots. Update the connector in Claude to this URL.");
+      if (endpoint.needsChoice) {
+        say(endpoint.message ?? "A Cloudflare zone is required for named mode.");
+        return;
+      }
+      if (endpoint.fallback && endpoint.message) say(endpoint.message);
+      if (endpoint.namedReady && endpoint.hostname) check(`Named tunnel ready: ${endpoint.hostname}`);
+      else check("Quick Tunnel selected");
+      if (endpoint.mcpUrl) check(`Connector URL: ${endpoint.mcpUrl}`);
     } catch (error) {
       handleCliError(error, opts.json);
     }
