@@ -46,7 +46,7 @@ git clone https://github.com/willio/claude-to-codex.git
 cd claude-to-codex
 pnpm install
 pnpm build
-npm install -g .
+node bin/c2c.js install   # systemwide install: ~/.c2c (app + state + launcher)
 ```
 
 Install Codex skill:
