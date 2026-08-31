@@ -14,7 +14,7 @@ export const CHATGPT_PLUGINS_URL = CONNECTOR_SETTINGS_URL;
 /** @deprecated Use CREATE_CONNECTOR_URL. */
 export const CHATGPT_CREATE_CONNECTOR_URL = CREATE_CONNECTOR_URL;
 
-export const DEFAULT_CONNECTOR_NAME = "Codex with Claude";
+export const DEFAULT_CONNECTOR_NAME = "Claude to Codex";
 
 export interface LastEndpoint {
   workspaceId: string;

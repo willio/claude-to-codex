@@ -1,4 +1,4 @@
-# Codex with Claude
+# Claude to Codex (C2C)
 
 **English** | [Bahasa Indonesia](README.id.md) | [简体中文](README.zh-CN.md)
 
@@ -43,7 +43,7 @@ Requirements: Node.js ≥ 20, `git`, `cloudflared`, and Claude Web with custom c
 
 ```bash
 git clone https://github.com/willio/claude-to-codex.git
-cd codex-with-claude
+cd claude-to-codex
 pnpm install
 pnpm build
 npm install -g .
@@ -52,8 +52,8 @@ npm install -g .
 Install the Codex skill:
 
 ```bash
-mkdir -p ~/.codex/skills/codex-with-claude
-cp skill/SKILL.md ~/.codex/skills/codex-with-claude/
+mkdir -p ~/.codex/skills/claude-to-codex
+cp skill/SKILL.md ~/.codex/skills/claude-to-codex/
 ```
 
 ### Connect Claude — once
@@ -173,7 +173,7 @@ For compatibility, `doctor --json` exposes the canonical `connectorRepair` field
 
 ## Compatibility
 
-Codex with Claude began from the ideas and architecture of `codex-with-chatgpt` and has since evolved into an independent implementation.
+Claude to Codex began from the ideas and architecture of `codex-with-chatgpt` and has since evolved into an independent implementation.
 
 The current architecture uses one installation-level Claude connector serving multiple locally registered Codex workspaces.
 
@@ -210,11 +210,11 @@ docs/             architecture, protocol, security and migration
 
 ## Credits
 
-Codex with Claude builds on the original idea and architecture of [codex-with-chatgpt](https://github.com/XiaoDuoYa/codex-with-chatgpt) by [@XiaoDuoYa](https://github.com/XiaoDuoYa).
+Claude to Codex builds on the original idea and architecture of [codex-with-chatgpt](https://github.com/XiaoDuoYa/codex-with-chatgpt) by [@XiaoDuoYa](https://github.com/XiaoDuoYa).
 
 The project has since diverged into an independent Claude Web implementation, while preserving attribution to the upstream work and its MIT copyright in [LICENSE](LICENSE).
 
-Codex with Claude is an unofficial community project and is not affiliated with or endorsed by Anthropic or OpenAI.
+Claude to Codex is an unofficial community project and is not affiliated with or endorsed by Anthropic or OpenAI.
 
 ## License
 

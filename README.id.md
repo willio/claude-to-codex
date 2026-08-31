@@ -1,4 +1,4 @@
-# Codex with Claude
+# Claude to Codex (C2C)
 
 [English](README.md) | **Bahasa Indonesia** | [简体中文](README.zh-CN.md)
 
@@ -43,7 +43,7 @@ Persyaratan: Node.js ≥ 20, `git`, `cloudflared`, dan Claude Web dengan dukunga
 
 ```bash
 git clone https://github.com/willio/claude-to-codex.git
-cd codex-with-claude
+cd claude-to-codex
 pnpm install
 pnpm build
 npm install -g .
@@ -52,8 +52,8 @@ npm install -g .
 Install Codex skill:
 
 ```bash
-mkdir -p ~/.codex/skills/codex-with-claude
-cp skill/SKILL.md ~/.codex/skills/codex-with-claude/
+mkdir -p ~/.codex/skills/claude-to-codex
+cp skill/SKILL.md ~/.codex/skills/claude-to-codex/
 ```
 
 ### Hubungkan Claude — cukup sekali
@@ -173,7 +173,7 @@ Untuk kompatibilitas, `doctor --json` menggunakan `connectorRepair` sebagai fiel
 
 ## Kompatibilitas
 
-Codex with Claude berawal dari ide dan arsitektur `codex-with-chatgpt`, kemudian berkembang menjadi implementasi independen.
+Claude to Codex berawal dari ide dan arsitektur `codex-with-chatgpt`, kemudian berkembang menjadi implementasi independen.
 
 Arsitektur saat ini menggunakan satu connector Claude pada level instalasi untuk melayani banyak workspace Codex yang didaftarkan secara lokal.
 
@@ -210,11 +210,11 @@ docs/             architecture, protocol, security and migration
 
 ## Credits
 
-Codex with Claude dibangun di atas ide dan arsitektur asli [codex-with-chatgpt](https://github.com/XiaoDuoYa/codex-with-chatgpt) karya [@XiaoDuoYa](https://github.com/XiaoDuoYa).
+Claude to Codex dibangun di atas ide dan arsitektur asli [codex-with-chatgpt](https://github.com/XiaoDuoYa/codex-with-chatgpt) karya [@XiaoDuoYa](https://github.com/XiaoDuoYa).
 
 Project ini kemudian berkembang menjadi implementasi independen untuk Claude Web, dengan tetap menjaga atribusi untuk karya upstream dan copyright MIT-nya di [LICENSE](LICENSE).
 
-Codex with Claude adalah project komunitas tidak resmi dan tidak berafiliasi dengan maupun didukung oleh Anthropic atau OpenAI.
+Claude to Codex adalah project komunitas tidak resmi dan tidak berafiliasi dengan maupun didukung oleh Anthropic atau OpenAI.
 
 ## License
 
