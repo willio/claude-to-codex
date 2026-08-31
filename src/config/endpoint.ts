@@ -84,5 +84,5 @@ export function connectorNameFor(opts: {
 }
 
 export function reclaimUserMessage(connectorName: string): string {
-  return `当前项目的安全连接地址已经失效。请在 Claude 的 Customize > Connectors 中移除「${connectorName}」并用新地址重新添加，其它项目的连接不动。`;
+  return `This workspace's connector URL has expired. In Claude, Customize > Connectors, remove "${connectorName}" and re-add it with the new address. Other workspaces are unaffected.`;
 }
