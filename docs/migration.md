@@ -16,6 +16,27 @@ If both directories exist, the Claude directory wins.
 
 `C2C_STATE_DIR` continues to override both locations.
 
+
+## OAuth: per-workspace bridge → installation broker
+
+Legacy C2C stored OAuth tokens in `auth/<workspace-id>.json`, one file per
+per-project bridge. The broker stores tokens in `auth/<installation-id>.json`
+where the principal is the C2C installation (`c2c_inst_…`).
+
+To upgrade without deleting legacy files:
+
+```bash
+c2c broker migrate-auth
+```
+
+This copies live client registrations and unexpired tokens into the
+installation auth file, re-binding them to the installation id. Legacy auth
+files are left in place for rollback. A record is written to
+`auth/migration.json`.
+
+Top-level `c2c pair` and `c2c unpair` now target the installation broker by
+default. Pass `-w <path>` only when repairing a legacy per-project bridge.
+
 ## Machine-readable CLI output
 
 `c2c doctor --json` exposes `connectorRepair` as the canonical connector-repair
