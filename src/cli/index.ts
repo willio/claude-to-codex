@@ -5,6 +5,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { startBridge } from "../bridge/server.js";
+import { CONNECTOR_DISPLAY_NAME } from "../broker/server.js";
 import { findLiveBridge, probeBridge, readRuntimeState, type RuntimeState } from "../bridge/runtime.js";
 import { adminFetch, ensureBridge, stopBridge } from "../process/daemon.js";
 import { Workspace } from "../workspace/manager.js";
@@ -221,9 +222,9 @@ program
 
 program
   .command("setup")
-  .description("First-time setup: bridge + secure connection + pairing code")
+  .description("Set up this workspace with the C2C installation: broker, public endpoint, registration")
   .option("-w, --workspace <path>")
-  .option("--no-tunnel", "local-only setup (development)")
+  .option("--no-tunnel", "local only (no public endpoint)")
   .option("--json", "machine-readable output", false)
   .action(async (opts: { workspace?: string; tunnel: boolean; json: boolean }) => {
     const root = resolveWorkspace(opts.workspace);
@@ -231,56 +232,62 @@ program
       if (!opts.json) {
         say(PRODUCT_NAME);
         say("");
-        say("Connecting to Claude…");
+        say("Connecting this workspace to your C2C installation…");
         say("");
       }
       const sandbox = trySandboxAllow();
-      const { runtime, info, mcpUrl } = await ensureBridgeAndTunnel(root, { tunnel: opts.tunnel });
-      const connectorName = mcpUrl
-        ? persistWorkspaceEndpoint({
-            workspaceId: info.workspaceId,
-            workspaceName: info.workspaceName,
-            port: runtime.port,
-            publicUrl: info.publicUrl,
-            mcpUrl,
-          })
-        : connectorNameFor({
-            workspaceName: info.workspaceName,
-            workspaceId: info.workspaceId,
-            previousName: readLastEndpoint(info.workspaceId)?.connectorName,
-            hadEndpointBefore: Boolean(readLastEndpoint(info.workspaceId)),
-          });
-      const pairingResult = await adminFetch<PairingResponse>(runtime, "POST", "/admin/pairing");
-      const tunnelState = readTunnelState(info.workspaceId);
+      const { ensureBroker, ensureBrokerTunnel, ensureWorkspaceSession } = await import("../broker/daemon.js");
+      const runtime = await ensureBroker();
+      let mcpUrl: string | null = null;
+      if (opts.tunnel) {
+        const url = await ensureBrokerTunnel(runtime);
+        mcpUrl = `${url}/mcp`;
+      }
+      const session = await ensureWorkspaceSession(runtime, root);
+      const info = await adminFetch<AdminInfo & { installationId?: string; tokenCount?: number }>(
+        runtime,
+        "GET",
+        "/admin/info"
+      );
+      const authorized = (info.tokenCount ?? 0) > 0;
+
+      let pairingCode: string | undefined;
+      let pairingExpiresAt: number | undefined;
+      if (!authorized) {
+        const pairing = await adminFetch<PairingResponse>(runtime, "POST", "/admin/pairing");
+        pairingCode = pairing.code;
+        pairingExpiresAt = pairing.expiresAt;
+      }
+
       if (opts.json) {
         say(
           JSON.stringify({
             ok: true,
-            workspaceId: info.workspaceId,
-            workspaceName: info.workspaceName,
-            connectorName,
-            mcpUrl: mcpUrl ?? `http://127.0.0.1:${runtime.port}/mcp`,
-            local: mcpUrl === null,
-            pairingCode: pairingResult.code,
-            pairingExpiresAt: pairingResult.expiresAt,
+            installationId: info.installationId,
+            workspaceId: session.workspaceId,
+            workspaceName: session.displayName,
+            mcpUrl,
+            authorized,
+            pairingCode,
+            pairingExpiresAt,
             sandbox,
-            tunnel: {
-              mode: isNamedTunnelReady(tunnelState) ? "named" : "quick",
-              hostname: tunnelState.hostname ?? null,
-              fallback: Boolean(tunnelState.fallbackReason),
-            },
           })
         );
         return;
       }
-      check(`Workspace detected: ${info.workspaceName}`);
-      check("Bridge started");
-      if (mcpUrl) check("Secure connection established");
+      check(`Workspace registered: ${session.displayName} (${session.workspaceId})`);
+      check(`Broker is running (port ${runtime.port})`);
+      if (mcpUrl) check(`Connector URL: ${mcpUrl}`);
       say("");
-      say(`Connector URL: ${mcpUrl ?? `http://127.0.0.1:${runtime.port}/mcp`}`);
-      say(`Pairing code: ${pairingResult.code} (valid ${Math.round((pairingResult.expiresAt - Date.now()) / 60000)} min)`);
-      say("");
-      say("Next: in Claude, Customize > Connectors > Add custom connector, paste the URL above, then enter the pairing code.");
+      if (authorized) {
+        check("Claude is already authorized for this installation.");
+        say(`Ask Claude to inspect workspace ${session.workspaceId} — no connector changes needed.`);
+      } else {
+        say("One-time Claude setup:");
+        say("1. In Claude Web: Customize > Connectors > Add custom connector");
+        say("2. Paste the URL above and complete OAuth. Then enter this pairing code:");
+        say(`   ${pairingCode}   (valid ~5 min — rerun \`c2c broker pair\` if it expires)`);
+      }
     } catch (error) {
       handleCliError(error, opts.json);
     }
@@ -350,7 +357,7 @@ program
 
 program
   .command("doctor")
-  .description("Diagnose and auto-repair the connection")
+  .description("Diagnose and auto-repair the C2C installation for this workspace")
   .option("-w, --workspace <path>")
   .option("--no-fix", "diagnose only, do not repair")
   .option("--json", "machine-readable output", false)
@@ -392,76 +399,35 @@ program
       report.workspace = { ok: false, detail: (error as Error).message };
     }
 
-    // Bridge
-    let runtime: RuntimeState | null = null;
-    if (workspace) {
-      runtime = await findLiveBridge(workspace.id);
-      if (!runtime && opts.fix) {
-        try {
-          runtime = (await ensureBridge(root)).runtime;
-          results.push("Started the bridge automatically");
-        } catch (error) {
-          report.bridge = { ok: false, detail: (error as Error).message };
-        }
-      }
-      if (runtime) report.bridge = { ok: true, detail: `port ${runtime.port}` };
-      else report.bridge = report.bridge ?? { ok: false, detail: "not running" };
+    // Installation identity
+    try {
+      const { loadOrCreateInstallation } = await import("../workspaces/installation.js");
+      report.installation = { ok: true, detail: loadOrCreateInstallation(getStateDir()).installationId };
+    } catch (error) {
+      report.installation = { ok: false, detail: (error as Error).message };
     }
 
-    // MCP local reachability (401 without token means MCP + auth both work)
-    if (runtime) {
+    // Broker daemon
+    const { ensureBroker, ensureBrokerTunnel, ensureWorkspaceSession, installationRuntime } = await import(
+      "../broker/daemon.js"
+    );
+    let runtime = installationRuntime();
+    if (!runtime && opts.fix) {
       try {
-        const response = await fetch(`http://127.0.0.1:${runtime.port}/mcp`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ jsonrpc: "2.0", method: "ping", id: 1 }),
-        });
-        report.mcp = { ok: response.status === 401, detail: `unauthenticated request returned ${response.status}` };
-        report.oauth = { ok: response.status === 401 };
+        runtime = await ensureBroker();
+        results.push("Started the broker");
       } catch (error) {
-        report.mcp = { ok: false, detail: (error as Error).message };
+        report.broker = { ok: false, detail: (error as Error).message };
       }
     }
+    report.broker = runtime
+      ? { ok: true, detail: `port ${runtime.port}` }
+      : report.broker ?? { ok: false, detail: "not running (c2c broker start)" };
 
-    // Tunnel + remote reachability. If this workspace once had a public URL,
-    // a full quit reclaims it — restore a tunnel and tell the Skill to update
-    // the existing Claude connector (never treat that as "local mode").
-    const lastEndpoint = workspace ? readLastEndpoint(workspace.id) : null;
-    const connectorName = workspace
-      ? connectorNameFor({
-          workspaceName: workspace.name,
-          workspaceId: workspace.id,
-          previousName: lastEndpoint?.connectorName,
-          hadEndpointBefore: Boolean(lastEndpoint),
-        })
-      : DEFAULT_CONNECTOR_NAME;
-    const tunnelState = workspace ? readTunnelState(workspace.id) : null;
-    const namedReady = tunnelState ? isNamedTunnelReady(tunnelState) : false;
-    let namedRepair: { needed: boolean; userMessage?: string } = { needed: false };
-    let connectorRepair: {
-      needed: boolean;
-      reason?: string;
-      connectorAction: "none" | "create" | "update";
-      connectorName: string;
-      userMessage?: string;
-      mcpUrl: string | null;
-      previousMcpUrl: string | null;
-      pairingCode?: string;
-      pairingExpiresAt?: number;
-      settingsUrl: string;
-      createConnectorUrl: string;
-      /** @deprecated legacy key names kept for older consumers */
-      pages: {
-        developerMode: string;
-        plugins: string;
-        createConnector: string;
-      };
-    } = {
+    let connectorRepair: Record<string, unknown> = {
       needed: false,
       connectorAction: "none",
-      connectorName,
-      mcpUrl: lastEndpoint?.mcpUrl ?? null,
-      previousMcpUrl: lastEndpoint?.mcpUrl ?? null,
+      connectorName: CONNECTOR_DISPLAY_NAME,
       settingsUrl: CONNECTOR_SETTINGS_URL,
       createConnectorUrl: CREATE_CONNECTOR_URL,
       pages: {
@@ -472,122 +438,131 @@ program
     };
 
     if (runtime) {
-      let info = await adminFetch<AdminInfo>(runtime, "GET", "/admin/info");
-      if (namedReady && opts.fix && info.tunnel.provider !== "cloudflare-named") {
-        await stopBridge(root);
-        await new Promise((resolve) => setTimeout(resolve, 400));
-        try {
-          runtime = (await ensureBridge(root)).runtime;
-          info = await adminFetch<AdminInfo>(runtime, "GET", "/admin/info");
-          results.push("Switched to the named tunnel");
-        } catch (error) {
-          report.tunnel = { ok: false, detail: (error as Error).message };
-        }
-      }
-      const expectedPublic = Boolean(lastEndpoint?.publicUrl) || namedReady;
-      let currentUrl = info.publicUrl ?? info.tunnel.url;
-      let healthy = false;
-      if (currentUrl) {
-        try {
-          const response = await fetch(`${currentUrl}/health`, { signal: AbortSignal.timeout(8000) });
-          healthy = response.ok;
-        } catch {
-          healthy = false;
-        }
+      // Broker health + public endpoint
+      let info: AdminInfo & { installationId?: string; tokenCount?: number; workspaceCount?: number } | null = null;
+      try {
+        info = await adminFetch<AdminInfo & { installationId?: string; tokenCount?: number; workspaceCount?: number }>(runtime, "GET", "/admin/info");
+        report.broker = { ok: true, detail: `port ${info.port}` };
+      } catch (error) {
+        report.broker = { ok: false, detail: (error as Error).message };
       }
 
-      if ((!currentUrl || !healthy) && opts.fix && (expectedPublic || info.tunnel.running)) {
-        try {
-          const binaries = detectTunnelBinaries();
-          if (!binaries.cloudflared) {
-            report.tunnel = { ok: false, detail: "NEED_CLOUDFLARED" };
-          } else {
-            const started = await adminFetch<TunnelStartResponse>(runtime, "POST", "/admin/tunnel/start", 90_000);
-            if (started.url) {
-              const previousUrl = lastEndpoint?.publicUrl;
-              currentUrl = started.url;
+      if (info) {
+        // Endpoint
+        const tunnel = info.tunnel;
+        if (tunnel.running && tunnel.url) {
+          let healthy = false;
+          try {
+            const response = await fetch(`${tunnel.url}/health`, { signal: AbortSignal.timeout(5000) });
+            healthy = response.ok;
+          } catch {
+            healthy = false;
+          }
+          if (!healthy && opts.fix) {
+            await adminFetch(runtime, "POST", "/admin/tunnel/stop").catch(() => undefined);
+            await new Promise((resolve) => setTimeout(resolve, 500));
+            const restarted = await adminFetch<{ url?: string }>(runtime, "POST", "/admin/tunnel/start", 90_000).catch(
+              () => null
+            );
+            if (restarted?.url) {
               healthy = true;
-              info = await adminFetch<AdminInfo>(runtime, "GET", "/admin/info");
-              const sameAddress =
-                previousUrl && normalizePublicUrl(previousUrl) === normalizePublicUrl(started.url);
-              results.push(sameAddress ? "Secure connection re-established" : "Secure connection re-established (address changed)");
+              results.push("Re-established the public endpoint");
             }
           }
-        } catch (error) {
-          report.tunnel = { ok: false, detail: (error as Error).message };
-        }
-      }
+          report.endpoint = healthy
+            ? { ok: true, detail: `${tunnel.url}/mcp` }
+            : { ok: false, detail: "public endpoint unreachable" };
 
-      if (currentUrl && healthy) {
-        report.tunnel = { ok: true, detail: currentUrl };
-        const nextMcp = mcpUrlFromPublic(currentUrl);
-        const action = connectorAction(lastEndpoint?.mcpUrl, nextMcp);
-        const boundName = nextMcp
-          ? persistWorkspaceEndpoint({
-              workspaceId: info.workspaceId,
-              workspaceName: info.workspaceName,
+          // Connector URL bookkeeping (the one connector in Claude)
+          if (healthy) {
+            const mcpUrl = `${tunnel.url}/mcp`;
+            const previous = readLastEndpoint(runtime.workspaceId);
+            const action = connectorAction(previous?.mcpUrl, mcpUrl);
+            const connectorName = persistWorkspaceEndpoint({
+              workspaceId: runtime.workspaceId,
+              workspaceName: CONNECTOR_DISPLAY_NAME,
               port: runtime.port,
-              publicUrl: currentUrl,
-              mcpUrl: nextMcp,
-              previous: lastEndpoint,
-            })
-          : connectorName;
-        connectorRepair = {
-          ...connectorRepair,
-          needed: action === "update",
-          reason: action === "update" ? "address_reclaimed" : undefined,
-          connectorAction: action,
-          connectorName: boundName,
-          userMessage: action === "update" ? reclaimUserMessage(boundName) : undefined,
-          mcpUrl: nextMcp,
-          previousMcpUrl: lastEndpoint?.mcpUrl ?? null,
-        };
-        if (action === "update") {
-          try {
-            const pairing = await adminFetch<PairingResponse>(runtime, "POST", "/admin/pairing");
-            connectorRepair.pairingCode = pairing.code;
-            connectorRepair.pairingExpiresAt = pairing.expiresAt;
-            results.push(`Generated a fresh pairing code — update "${boundName}" in Claude`);
-          } catch (error) {
-            report.oauth = { ok: false, detail: (error as Error).message };
+              publicUrl: tunnel.url,
+              mcpUrl,
+              previous,
+            });
+            connectorRepair = {
+              ...connectorRepair,
+              needed: action === "update",
+              connectorAction: action,
+              connectorName,
+              mcpUrl,
+              previousMcpUrl: previous?.mcpUrl ?? null,
+              userMessage: action === "update" ? reclaimUserMessage(connectorName) : undefined,
+            };
+            if (action === "update") {
+              try {
+                const pairing = await adminFetch<PairingResponse>(runtime, "POST", "/admin/pairing");
+                connectorRepair.pairingCode = pairing.code;
+                connectorRepair.pairingExpiresAt = pairing.expiresAt;
+                results.push("Endpoint changed — a fresh pairing code was generated for the connector update");
+              } catch (error) {
+                results.push(`Pairing code generation failed: ${(error as Error).message}`);
+              }
+            }
+          }
+        } else {
+          report.endpoint = { ok: false, detail: "not enabled (c2c broker start --tunnel)" };
+          if (opts.fix) {
+            const started = await adminFetch<{ url?: string }>(runtime, "POST", "/admin/tunnel/start", 90_000).catch(
+              () => null
+            );
+            if (started?.url) {
+              report.endpoint = { ok: true, detail: `${started.url}/mcp` };
+              results.push("Established the public endpoint");
+            }
           }
         }
-      } else if (namedReady) {
-        report.tunnel = report.tunnel ?? { ok: false, detail: "NAMED_TUNNEL_DOWN" };
-        namedRepair = { needed: true, userMessage: NAMED_REPAIR_MESSAGE };
-      } else if (expectedPublic) {
-        report.tunnel = report.tunnel ?? { ok: false, detail: "secure connection not restored" };
-        connectorRepair = {
-          ...connectorRepair,
-          needed: true,
-          reason: "address_reclaimed",
-          connectorAction: "update",
-          connectorName,
-          userMessage: reclaimUserMessage(connectorName),
-          mcpUrl: null,
-        };
-      } else if (!currentUrl) {
-        report.tunnel = { ok: true, detail: "not enabled (local mode)" };
-      } else {
-        report.tunnel = { ok: false, detail: "public URL unreachable" };
+
+        // Workspace registration
+        if (workspace) {
+          let registered: { displayName: string; id: string } | null = null;
+          try {
+            const { workspaces } = await adminFetch<{
+              workspaces: { id: string; displayName: string; canonicalRoot: string }[];
+            }>(runtime, "GET", "/admin/workspaces");
+            registered = workspaces.find((w) => w.canonicalRoot === workspace.root) ?? null;
+          } catch {
+            // broker unreachable is already reported
+          }
+          if (!registered && opts.fix) {
+            try {
+              registered = await adminFetch<{ id: string; displayName: string }>(runtime, "POST", "/admin/workspace", 60_000, { root });
+              results.push(`Registered this workspace (${registered.id})`);
+            } catch (error) {
+              results.push(`Workspace registration failed: ${(error as Error).message}`);
+            }
+          }
+          report.registration = registered
+            ? { ok: true, detail: `${registered.displayName} (${registered.id})` }
+            : { ok: false, detail: "this workspace is not registered (c2c use)" };
+
+          // Session heartbeat (best effort)
+          if (registered) {
+            try {
+              await ensureWorkspaceSession(runtime, root);
+              results.push("Codex session is active for this workspace");
+            } catch {
+              // non-fatal; broker issues already reported
+            }
+          }
+        }
+
+        // Authorization
+        report.authorization =
+          (info.tokenCount ?? 0) > 0
+            ? { ok: true, detail: `${info.tokenCount} token(s)` }
+            : { ok: false, detail: "not paired — run `c2c broker pair` and authorize in Claude" };
       }
-    } else if (namedReady) {
-      report.tunnel = { ok: false, detail: "NAMED_TUNNEL_DOWN" };
-      namedRepair = { needed: true, userMessage: NAMED_REPAIR_MESSAGE };
-    } else if (lastEndpoint?.publicUrl) {
-      report.tunnel = { ok: false, detail: "secure connection not running" };
-      connectorRepair = {
-        ...connectorRepair,
-        needed: true,
-        reason: "address_reclaimed",
-        connectorAction: "update",
-        connectorName,
-        userMessage: reclaimUserMessage(connectorName),
-      };
     }
 
     if (opts.json) {
-      say(JSON.stringify({ report, repairs: results, connectorRepair, namedRepair, chatgptRepair: connectorRepair }));
+      say(JSON.stringify({ report, repairs: results, connectorRepair, chatgptRepair: connectorRepair }));
       return;
     }
     say(`${PRODUCT_NAME} Doctor`);
@@ -596,45 +571,39 @@ program
       node: "Node.js",
       sandbox: "Sandbox",
       workspace: "Workspace",
-      bridge: "Bridge",
-      mcp: "MCP",
-      oauth: "OAuth",
-      tunnel: "Tunnel",
+      installation: "Installation",
+      broker: "Broker",
+      endpoint: "Endpoint",
+      registration: "Registration",
+      authorization: "Authorization",
     };
     let allOk = true;
     for (const [key, value] of Object.entries(report)) {
       const label = labels[key] ?? key;
-      if (value.ok) check(`${label}${value.detail ? `（${value.detail}）` : ""}`);
+      if (value.ok) check(`${label}${value.detail ? ` (${value.detail})` : ""}`);
       else {
-        cross(`${label}${value.detail ? `：${value.detail}` : ""}`);
+        cross(`${label}${value.detail ? `: ${value.detail}` : ""}`);
         allOk = false;
       }
     }
     for (const repair of results) say(`· ${repair}`);
     say("");
-    if (namedRepair.needed && namedRepair.userMessage) {
-      say(namedRepair.userMessage);
+    const repairRecord = connectorRepair as { needed?: boolean; userMessage?: string; mcpUrl?: string; pairingCode?: string };
+    if (repairRecord.needed && repairRecord.userMessage) {
+      say(repairRecord.userMessage);
+      if (repairRecord.mcpUrl) say(`New connector URL: ${repairRecord.mcpUrl}`);
+      if (repairRecord.pairingCode) say(`Pairing code: ${repairRecord.pairingCode}`);
       say("");
     }
-    if (connectorRepair.needed && connectorRepair.userMessage) {
-      say(connectorRepair.userMessage);
-      if (connectorRepair.mcpUrl) say(`New connector URL: ${connectorRepair.mcpUrl}`);
-      if (connectorRepair.pairingCode) say(`Pairing code: ${connectorRepair.pairingCode}`);
-      say("");
-    }
-    say(
-      allOk && !connectorRepair.needed && !namedRepair.needed
-        ? "Everything looks good."
-        : connectorRepair.needed
-          ? "Local side is ready — remove and re-add this connector in Claude (Customize > Connectors)."
-          : namedRepair.needed
-            ? "Named tunnel is down — a Cloudflare login is needed first."
-            : "Issues remain — try `c2c restart --tunnel`."
-    );
-    if (!allOk || namedRepair.needed) process.exitCode = 1;
+    if (allOk) say("Everything looks good.");
+    else if (!report.broker?.ok) say("The broker is not running — `c2c broker start`.");
+    else if (report.authorization && !report.authorization.ok)
+      say("Run `c2c broker pair` and complete authorization in Claude.");
+    else say("Issues remain — `c2c doctor --fix` can repair most of them.");
+    if (!allOk) process.exitCode = 1;
   });
 
-// ---------------------------------------------------------------- pair / unpair
+// ---------------------------------------------------------------- pair / unpair// ---------------------------------------------------------------- pair / unpair
 
 program
   .command("pair")
@@ -897,6 +866,14 @@ program
       const changed = /^\d+$/.test(opts.changedFiles)
         ? parseInt(opts.changedFiles, 10)
         : opts.changedFiles.split(",").map((file) => file.trim()).filter(Boolean);
+      void (async () => {
+        try {
+          const { heartbeatWorkspaceSession } = await import("../broker/daemon.js");
+          await heartbeatWorkspaceSession(workspace.root);
+        } catch {
+          // heartbeat is best effort
+        }
+      })();
       appendExecutionRecord(workspace.id, {
         taskId: opts.task,
         iteration: parseInt(opts.iteration, 10),
@@ -1352,21 +1329,16 @@ program
   .option("--json", "machine-readable output", false)
   .action(async (pathArg: string | undefined, opts: { workspace?: string; name?: string; json: boolean }) => {
     try {
-      const { ensureBroker } = await import("../broker/daemon.js");
+      const { ensureBroker, ensureWorkspaceSession } = await import("../broker/daemon.js");
       const root = resolveWorkspace(pathArg ?? opts.workspace);
       const runtime = await ensureBroker();
-      const registration = await adminFetch<{ id: string; displayName: string }>(
-        runtime,
-        "POST",
-        "/admin/workspace",
-        60_000,
-        { root, displayName: opts.name }
-      );
+      const session = await ensureWorkspaceSession(runtime, root, { displayName: opts.name, pid: process.pid });
       if (opts.json) {
-        say(JSON.stringify({ ok: true, ...registration, root }));
+        say(JSON.stringify({ ok: true, workspaceId: session.workspaceId, displayName: session.displayName, sessionId: session.sessionId, root }));
         return;
       }
-      check(`Registered workspace "${registration.displayName}" (${registration.id})`);
+      check(`Registered workspace "${session.displayName}" (${session.workspaceId})`);
+      check("Codex session is active for this workspace");
       say("Claude can now inspect it — no connector changes needed.");
     } catch (error) {
       handleCliError(error, opts.json);

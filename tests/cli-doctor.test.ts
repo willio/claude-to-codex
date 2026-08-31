@@ -25,43 +25,29 @@ function runDoctorJson(workspaceRoot: string, stateDir: string): Record<string, 
   }
 }
 
-describe("c2c doctor --json compatibility", () => {
-  it("exposes connectorRepair canonically with chatgptRepair as a deprecated alias", () => {
+describe("c2c doctor --json", () => {
+  it("reports the installation contract with connectorRepair and its deprecated alias", () => {
     const stateDir = isolateStateDir();
     const root = makeTmpDir("doctor-json");
     write(root, "hello.txt", "hello");
 
-    // Workspace ids are a hash of the resolved root; mirror Workspace's rule.
-    const realId = createHash("sha256").update(root.toLowerCase()).digest("hex").slice(0, 12);
-
-    const connectorName = "Claude to Codex · doctor-json-test";
-    const endpointsDir = path.join(stateDir, "endpoints");
-    fs.mkdirSync(endpointsDir, { recursive: true, mode: 0o700 });
-    fs.writeFileSync(
-      path.join(endpointsDir, `${realId}.json`),
-      JSON.stringify({
-        workspaceId: realId,
-        port: 48765,
-        publicUrl: "https://expired-tunnel.example.trycloudflare.com",
-        mcpUrl: "https://expired-tunnel.example.trycloudflare.com/mcp",
-        connectorName,
-        savedAt: new Date().toISOString(),
-      }),
-      { mode: 0o600 }
-    );
-
     const json = runDoctorJson(root, stateDir);
+    const report = json.report as Record<string, { ok: boolean; detail?: string }>;
     const canonical = json.connectorRepair as Record<string, unknown> | undefined;
     const legacy = json.chatgptRepair as Record<string, unknown> | undefined;
 
+    // shape contract: canonical field with the deprecated alias alongside
     expect(canonical).toBeDefined();
     expect(legacy).toBeDefined();
     expect(legacy).toStrictEqual(canonical);
-    expect(canonical?.connectorName).toBe(connectorName);
-    expect(canonical?.needed).toBe(true);
-    expect(canonical?.connectorAction).toBe("update");
     expect(canonical?.settingsUrl).toBe("https://claude.ai/settings/connectors");
     expect(canonical?.createConnectorUrl).toBe("https://claude.ai/settings/connectors");
+    expect(canonical?.connectorAction).toBe("none");
+
+    // without a running broker, the doctor reports honestly and fails closed
+    expect(report.workspace?.ok).toBe(true);
+    expect(report.installation?.ok).toBe(true);
+    expect(report.broker?.ok).toBe(false);
 
     cleanup(root);
   });
