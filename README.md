@@ -146,18 +146,22 @@ execution_summary
 
 **Short-lived pairing.** Pairing establishes authorization without exposing a long-lived credential in the browser.
 
-See [docs/security.md](docs/security.md) for the threat model, [docs/multi-workspace.md](docs/multi-workspace.md) for the workspace architecture, and [docs/local-e2e.md](docs/local-e2e.md) for end-to-end validation.
+See [docs/security.md](docs/security.md) for the threat model and [SECURITY.md](SECURITY.md) for vulnerability reporting, [docs/multi-workspace.md](docs/multi-workspace.md) for the workspace architecture, and [docs/local-e2e.md](docs/local-e2e.md) for end-to-end validation.
 
 ## CLI
 
 ```text
 c2c setup
-c2c start
-c2c status
+c2c use
+c2c broker start
+c2c broker status
+c2c broker pair
 c2c doctor
 c2c pair
 c2c unpair
 c2c record
+c2c start
+c2c status
 c2c tunnel
 c2c session
 c2c logs

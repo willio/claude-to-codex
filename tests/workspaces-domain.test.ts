@@ -112,6 +112,19 @@ describe("workspace registry", () => {
     expect(registry.remove(entry.id)).toBe(false);
   });
 
+  it("preserves a custom display name when re-registering without --name", () => {
+    const stateDir = isolateStateDir();
+    const root = makeRoot("named");
+    const registry = WorkspaceRegistry.load(stateDir);
+
+    const first = registry.register({ root, displayName: "My App" });
+    expect(first.displayName).toBe("My App");
+
+    const again = registry.register({ root });
+    expect(again.id).toBe(first.id);
+    expect(again.displayName).toBe("My App");
+  });
+
   it("persists across instances and lists by display name", () => {
     const stateDir = isolateStateDir();
     const first = WorkspaceRegistry.load(stateDir);
