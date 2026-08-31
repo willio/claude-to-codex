@@ -1101,6 +1101,30 @@ brokerCmd
   });
 
 brokerCmd
+  .command("pair")
+  .description("Generate a one-time pairing code for the installation connector")
+  .option("--json", "machine-readable output", false)
+  .action(async (opts: { json: boolean }) => {
+    try {
+      const { ensureBroker } = await import("../broker/daemon.js");
+      const runtime = await ensureBroker();
+      const pairing = await adminFetch<{ code: string; expiresAt: number }>(
+        runtime,
+        "POST",
+        "/admin/pairing"
+      );
+      if (opts.json) {
+        say(JSON.stringify({ ok: true, pairingCode: pairing.code, expiresAt: pairing.expiresAt }));
+        return;
+      }
+      say(`Pairing code: ${pairing.code}`);
+      say(`(valid ${Math.round((pairing.expiresAt - Date.now()) / 60000)} min, single use)`);
+    } catch (error) {
+      handleCliError(error, opts.json);
+    }
+  });
+
+brokerCmd
   .command("stop")
   .description("Stop the installation broker")
   .action(async () => {
