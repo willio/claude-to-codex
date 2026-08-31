@@ -25,8 +25,8 @@ describe("connectorAction", () => {
 
   it("updates when the old address was reclaimed", () => {
     expect(connectorAction("https://old.trycloudflare.com/mcp", "https://new.trycloudflare.com/mcp")).toBe("update");
-    expect(reclaimUserMessage("Codex with Claude")).toContain("Claude");
-    expect(reclaimUserMessage("Codex with Claude")).toContain("remove");
+    expect(reclaimUserMessage("Claude to Codex")).toContain("Claude");
+    expect(reclaimUserMessage("Claude to Codex")).toContain("remove");
   });
 
   it("does nothing without a next URL", () => {
@@ -40,7 +40,7 @@ describe("connectorNameFor", () => {
       connectorNameFor({
         workspaceName: "EchoMind",
         workspaceId: "abc123abc123",
-        previousName: "Codex with Claude",
+        previousName: "Claude to Codex",
         hadEndpointBefore: true,
       })
     ).toBe(DEFAULT_CONNECTOR_NAME);
@@ -63,7 +63,7 @@ describe("connectorNameFor", () => {
         workspaceId: "def456def456",
         hadEndpointBefore: false,
       })
-    ).toBe("Codex with Claude · Landing");
+    ).toBe("Claude to Codex · Landing");
   });
 
   it("points connector management at Claude Web", () => {

@@ -1,4 +1,4 @@
-# Codex with Claude
+# Claude to Codex (C2C)
 
 [English](README.md) | [Bahasa Indonesia](README.id.md) | **简体中文**
 
@@ -30,8 +30,8 @@ Claude 不会获得写文件、删除文件、执行任意命令或提交代码�
 ## 安装
 
 ```bash
-git clone https://github.com/willio/codex-with-claude.git ~/codex-with-claude
-cd ~/codex-with-claude
+git clone https://github.com/willio/claude-to-codex.git ~/claude-to-codex
+cd ~/claude-to-codex
 corepack pnpm install
 corepack pnpm build
 ```

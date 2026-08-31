@@ -1,10 +1,10 @@
 ---
-name: codex-with-claude
+name: claude-to-codex
 description: >
   Use Claude Web as the planning and review brain for Codex coding sessions while Codex keeps execution ownership.
 ---
 
-# Codex with Claude
+# Claude to Codex
 
 Claude thinks. Codex works.
 
