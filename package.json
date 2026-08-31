@@ -15,6 +15,7 @@
     "dev": "tsx src/cli/index.ts",
     "test": "vitest run",
     "test:e2e": "vitest run tests/local-e2e-broker.test.ts",
+    "test:e2e:live": "node scripts/live-e2e.mjs",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
   },

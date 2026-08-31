@@ -23,6 +23,23 @@ stays with Codex.
 protocol Claude performs; clicking through Claude's own connector UI still
 requires a human login.
 
+## Live installation (`~/.c2c`)
+
+After `c2c install`, exercise the running broker (loopback by default):
+
+```bash
+pnpm build && node bin/c2c.js install
+c2c broker stop && c2c broker start
+pnpm test:e2e:live
+```
+
+Optional public tunnel check:
+
+```bash
+C2C_E2E_URL=https://your-host.example.com pnpm test:e2e:live
+```
+
+
 ## Broker-first procedure (current)
 
 1. **Prerequisites**: Node.js ≥ 20, git, `cloudflared`.
