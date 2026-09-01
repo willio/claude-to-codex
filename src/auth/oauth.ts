@@ -279,7 +279,9 @@ export function createOAuthRouter(deps: OAuthDeps): Router {
       clientId: request.clientId, redirectUri: request.redirectUri, codeChallenge: request.codeChallenge,
       scopes: request.scopes, pairingSessionId: verdict.sessionId, resource: request.resource,
     });
-    deps.logger.info(`Pairing verified; issued authorization code for client ${request.clientId}`);
+    deps.logger.info(
+      `Pairing verified; issued authorization code for client ${request.clientId} redirecting to ${request.redirectUri}`
+    );
     const url = new URL(request.redirectUri);
     url.searchParams.set("code", code);
     if (request.state) url.searchParams.set("state", request.state);
@@ -291,10 +293,22 @@ export function createOAuthRouter(deps: OAuthDeps): Router {
     const grantType = body.grant_type;
     if (grantType === "authorization_code") {
       const { code, code_verifier: codeVerifier, client_id: clientId, redirect_uri: redirectUri } = body;
-      if (!code || !codeVerifier || !clientId) { res.status(400).json({ error: "invalid_request" }); return; }
+      if (!code || !codeVerifier || !clientId) {
+        deps.logger.warn(`Token exchange rejected: invalid_request (missing ${!code ? "code" : !codeVerifier ? "verifier" : "client_id"})`);
+        res.status(400).json({ error: "invalid_request" });
+        return;
+      }
       const record = deps.store.consumeAuthorizationCode(code);
-      if (!record || record.clientId !== clientId) { res.status(400).json({ error: "invalid_grant" }); return; }
-      if (redirectUri && redirectUri !== record.redirectUri) { res.status(400).json({ error: "invalid_grant", error_description: "redirect_uri mismatch" }); return; }
+      if (!record || record.clientId !== clientId) {
+        deps.logger.warn(`Token exchange rejected: invalid_grant (code unknown, expired, or client mismatch for ${clientId})`);
+        res.status(400).json({ error: "invalid_grant" });
+        return;
+      }
+      if (redirectUri && redirectUri !== record.redirectUri) {
+        deps.logger.warn(`Token exchange rejected: redirect_uri mismatch (got ${redirectUri}, expected ${record.redirectUri})`);
+        res.status(400).json({ error: "invalid_grant", error_description: "redirect_uri mismatch" });
+        return;
+      }
       if (!safeEqual(base64UrlSha256(codeVerifier), record.codeChallenge)) {
         deps.logger.warn("PKCE verification failed at token endpoint");
         res.status(400).json({ error: "invalid_grant", error_description: "PKCE verification failed" }); return;
