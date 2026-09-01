@@ -95,11 +95,15 @@ export async function resolveInstallationTunnel(
         message: "Tell me your Cloudflare domain, e.g. example.com",
       });
     }
+    // Named profiles need their own Cloudflare tunnel; reusing the default
+    // name would route both profiles' hostnames at one installation.
+    const profile = process.env.C2C_PROFILE?.trim();
     const result = await provisionNamedTunnel({
       workspaceId: INSTALLATION_TUNNEL_ID,
-      workspaceName: "installation",
+      workspaceName: profile ? `installation-${profile}` : "installation",
       zone,
       hostname: opts.hostname,
+      tunnelName: profile ? `c2c-installation-${profile}` : undefined,
     });
     state = result.state;
     const { url } = await restartBrokerTunnel();

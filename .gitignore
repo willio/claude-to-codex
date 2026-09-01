@@ -8,3 +8,7 @@ dist/
 .env.*
 !.env.example
 coverage/
+
+# local agent/machine config (personal hostnames — never commit)
+AGENTS.md
+.serena/

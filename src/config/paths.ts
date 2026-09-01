@@ -40,6 +40,10 @@ export function getStateDir(): string {
   const override = process.env.C2C_STATE_DIR;
   if (override && override.trim() !== "") return path.resolve(override);
 
+  // 1b. named profile: an isolated installation (~/.c2c/profiles/<name>)
+  const profile = process.env.C2C_PROFILE?.trim();
+  if (profile) return path.join(getC2cHome(), "profiles", profile);
+
   // 2. the systemwide installation home, once `c2c install` has created it
   const homeState = path.join(getC2cHome(), "state");
   if (fs.existsSync(homeState)) return homeState;
