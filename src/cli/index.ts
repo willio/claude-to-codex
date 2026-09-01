@@ -1451,6 +1451,16 @@ brokerCmd
         `Migrated ${result.tokensMigrated} token(s) from ${result.sourceFiles.length} legacy file(s) to ${result.installationId}`
       );
       say("Legacy auth files were kept for rollback.");
+      // The running broker holds auth in memory: restart so migrated tokens
+      // are recognized without waiting for the next natural restart.
+      const { stopBroker, ensureBroker } = await import("../broker/daemon.js");
+      const wasRunning = (await import("../broker/daemon.js")).installationRuntime();
+      if (wasRunning) {
+        await stopBroker();
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        await ensureBroker();
+        check("Broker restarted to load the migrated tokens");
+      }
     } catch (error) {
       handleCliError(error, opts.json);
     }
