@@ -38,6 +38,7 @@ When the user starts a session in a project, register it and learn its identity:
 3. Remember this workspace `workspaceId` — include it whenever you tell the user what to ask Claude, and use it in INIT instructions (Claude scopes every tool call with it).
 4. When a Codex session ends, run `c2c use --end --json` to clear the local session binding.
 5. Route repairs through `c2c doctor --json` (installation-aware) or `c2c broker status`; per-project bridges (`c2c start`) are legacy compatibility only.
+6. In the Codex desktop app, sandboxed commands may fail with EPERM or `fetch failed` when they touch the broker (loopback requests, daemon spawn, state writes). The broker is a system service that is usually already running — first try `c2c broker status`; if it reports the state as unclear, rerun the command with sandbox escalation approved, or in a regular terminal. Do not conclude the broker is down from a sandboxed failure alone.
 
 ## Planning loop
 

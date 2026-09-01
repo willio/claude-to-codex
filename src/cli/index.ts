@@ -401,6 +401,7 @@ program
   .command("doctor")
   .description("Diagnose and auto-repair the C2C installation for this workspace")
   .option("-w, --workspace <path>")
+  .option("--fix", "repair issues (default behavior)")
   .option("--no-fix", "diagnose only, do not repair")
   .option("--json", "machine-readable output", false)
   .action(async (opts: { workspace?: string; fix: boolean; json: boolean }) => {
@@ -1327,21 +1328,37 @@ brokerCmd
       else say("Broker is not running. Use `c2c broker start`.");
       return;
     }
-    const info = await adminFetch<AdminInfo & { installationId?: string; workspaceCount?: number; activeSessions?: number }>(
-      runtime,
-      "GET",
-      "/admin/info"
-    );
-    if (opts.json) {
-      say(JSON.stringify({ ok: true, running: true, ...info }));
-      return;
+    try {
+      const info = await adminFetch<AdminInfo & { installationId?: string; workspaceCount?: number; activeSessions?: number }>(
+        runtime,
+        "GET",
+        "/admin/info"
+      );
+      if (opts.json) {
+        say(JSON.stringify({ ok: true, running: true, ...info }));
+        return;
+      }
+      check(`Installation: ${info.installationId}`);
+      check(`Broker: running (port ${info.port})`);
+      if (info.tunnel.running && info.tunnel.url) check(`Connector URL: ${info.tunnel.url}/mcp`);
+      else say("· Public endpoint: not enabled");
+      check(`Workspaces registered: ${info.workspaceCount ?? 0}`);
+      check(`Active Codex sessions: ${info.activeSessions ?? 0}`);
+    } catch (error) {
+      // The runtime file exists and matches this installation, but the probe
+      // failed — typical of a sandboxed agent blocking loopback requests, not
+      // a dead broker. Report that instead of claiming it is down.
+      const detail =
+        `runtime file says pid ${runtime.pid} on port ${runtime.port}, but the broker did not respond ` +
+        `(${(error as Error).message}). If this is a sandboxed agent, run the command outside the sandbox ` +
+        `or approve escalation.`;
+      if (opts.json) say(JSON.stringify({ ok: true, running: "unknown", probe: "failed", detail, runtime }));
+      else {
+        cross(`Broker state unclear: ${detail}`);
+        say(`· Connector URL (from runtime): ${runtime.publicUrl ? runtime.publicUrl + "/mcp" : "not recorded"}`);
+      }
+      process.exitCode = 1;
     }
-    check(`Installation: ${info.installationId}`);
-    check(`Broker: running (port ${info.port})`);
-    if (info.tunnel.running && info.tunnel.url) check(`Connector URL: ${info.tunnel.url}/mcp`);
-    else say("· Public endpoint: not enabled");
-    check(`Workspaces registered: ${info.workspaceCount ?? 0}`);
-    check(`Active Codex sessions: ${info.activeSessions ?? 0}`);
   });
 
 const brokerTunnelCmd = brokerCmd
