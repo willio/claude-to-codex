@@ -1,8 +1,8 @@
-# Claude to Codex (C2C)
+# Chat to Codex (C2C)
 
 [English](README.md) | [Bahasa Indonesia](README.id.md) | **简体中文**
 
-> Claude 负责思考，Codex 负责执行。
+> 把你的 AI 聊天会话带到 Codex。
 
 ## 这是什么
 
@@ -30,8 +30,8 @@ Claude 不会获得写文件、删除文件、执行任意命令或提交代码�
 ## 安装
 
 ```bash
-git clone https://github.com/willio/claude-to-codex.git ~/claude-to-codex
-cd ~/claude-to-codex
+git clone https://github.com/willio/chat-to-codex.git ~/chat-to-codex
+cd ~/chat-to-codex
 corepack pnpm install
 corepack pnpm build
 ```

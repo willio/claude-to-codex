@@ -1,4 +1,4 @@
-# Claude to Codex (C2C)
+# Chat to Codex (C2C)
 
 [English](README.md) | **Bahasa Indonesia** | [简体中文](README.zh-CN.md)
 
@@ -42,8 +42,8 @@ Semua capability yang tersedia untuk Claude bersifat read-only. Workspace didaft
 Persyaratan: Node.js ≥ 20, `git`, `cloudflared`, dan Claude Web dengan dukungan custom connector.
 
 ```bash
-git clone https://github.com/willio/claude-to-codex.git
-cd claude-to-codex
+git clone https://github.com/willio/chat-to-codex.git
+cd chat-to-codex
 pnpm install
 pnpm build
 node bin/c2c.js install   # systemwide install: ~/.c2c (app + state + launcher)
@@ -52,8 +52,8 @@ node bin/c2c.js install   # systemwide install: ~/.c2c (app + state + launcher)
 Install Codex skill:
 
 ```bash
-mkdir -p ~/.codex/skills/claude-to-codex
-cp skill/SKILL.md ~/.codex/skills/claude-to-codex/
+mkdir -p ~/.codex/skills/chat-to-codex
+cp skill/SKILL.md ~/.codex/skills/chat-to-codex/
 ```
 
 ### Hubungkan Claude
@@ -178,7 +178,7 @@ Untuk kompatibilitas, `doctor --json` menggunakan `connectorRepair` sebagai fiel
 
 ## Kompatibilitas
 
-Claude to Codex berawal dari ide dan arsitektur `codex-with-chatgpt`, kemudian berkembang menjadi implementasi independen.
+Chat to Codex berawal dari ide dan arsitektur `codex-with-chatgpt`, kemudian berkembang menjadi implementasi independen.
 
 Arsitektur saat ini menggunakan satu connector Claude pada level instalasi untuk melayani banyak workspace Codex yang didaftarkan secara lokal.
 
@@ -215,11 +215,11 @@ docs/             architecture, protocol, security and migration
 
 ## Credits
 
-Claude to Codex dibangun di atas ide dan arsitektur dari [codex-with-chatgpt](https://github.com/XiaoDuoYa/codex-with-chatgpt) karya [@XiaoDuoYa](https://github.com/XiaoDuoYa).
+Chat to Codex dibangun di atas ide dan arsitektur dari [codex-with-chatgpt](https://github.com/XiaoDuoYa/codex-with-chatgpt) karya [@XiaoDuoYa](https://github.com/XiaoDuoYa).
 
 Project ini kemudian berkembang menjadi implementasi independen untuk Claude Web, dengan tetap menjaga atribusi untuk karya upstream dan copyright MIT-nya di [LICENSE](LICENSE).
 
-Claude to Codex adalah project komunitas dan tidak terafiliasi atau didukung oleh Anthropic maupun OpenAI.
+Chat to Codex adalah project komunitas dan tidak terafiliasi atau didukung oleh Anthropic maupun OpenAI.
 
 ## License
 
