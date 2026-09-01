@@ -41,7 +41,18 @@ export async function ensureBroker(opts: { stateDir?: string } = {}): Promise<Ru
 
   const logDir = ensureDir(path.join(stateDir, "logs"));
   const logFile = path.join(logDir, "broker.out.log");
-  const out = fs.openSync(logFile, "a", 0o600);
+  let out: number;
+  try {
+    out = fs.openSync(logFile, "a", 0o600);
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code ?? "";
+    throw new Error(
+      `Cannot write broker log ${logFile} (${code || (error as Error).message}). ` +
+        "Starting the broker spawns a system daemon — run this command outside the agent sandbox " +
+        "(approve escalation) or in a regular terminal. " +
+        "If the broker is already running, no action is needed; check with `c2c broker status` in a regular terminal."
+    );
+  }
   const { cmd, args } = cliEntry();
   const child = spawn(cmd, [...args, "broker-serve"], {
     detached: true,
