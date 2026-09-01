@@ -15,7 +15,7 @@ import type { TunnelProvider } from "../tunnel/provider.js";
 import { Logger, nullLogger } from "../logger/index.js";
 import { DEFAULT_HOST, DEFAULT_PORT, getStateDir } from "../config/paths.js";
 import { SERVICE_NAME, VERSION } from "../version.js";
-import { writeRuntimeState, clearRuntimeState, type RuntimeState } from "../bridge/runtime.js";
+import { writeRuntimeState, clearRuntimeState, probeBridge, type RuntimeState } from "../bridge/runtime.js";
 import { createAdminGuard } from "../bridge/admin-guard.js";
 import {
   loadOrCreateInstallation,
@@ -333,6 +333,19 @@ export async function startBroker(opts: BrokerOptions = {}): Promise<Broker> {
   });
 
   const { server, port } = await listen(app, host, opts.port ?? DEFAULT_PORT);
+  // Duplicate-daemon guard: if the preferred port was taken and we fell back
+  // to an ephemeral one, refuse to shadow an already-running broker for the
+  // same installation (it would split the CLI from the tunnel-bearing broker).
+  const preferredPort = opts.port ?? DEFAULT_PORT;
+  if (port !== preferredPort) {
+    const occupant = await probeBridge(preferredPort);
+    if (occupant && occupant.workspaceId === installation.installationId) {
+      server.close();
+      throw new Error(
+        `A broker for this installation is already running on port ${preferredPort}; not starting a duplicate.`
+      );
+    }
+  }
   const startedAt = new Date().toISOString();
   logger.info(
     `Broker listening on ${host}:${port} for installation ${installation.installationId} ` +
