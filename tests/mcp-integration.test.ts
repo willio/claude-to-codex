@@ -88,7 +88,7 @@ describe("MCP tools over Streamable HTTP", () => {
   it("read_file returns hello.txt", async () => {
     const result = await client.callTool({ name: "read_file", arguments: { path: "hello.txt" } });
     const file = jsonOf<{ content: string; totalLines: number }>(result);
-    expect(file.content).toContain("Hello from Claude to Codex!");
+    expect(file.content).toContain("Hello from Chat to Codex!");
   });
 
   it("read_file denies .env with ACCESS_DENIED_SENSITIVE_FILE and no content", async () => {

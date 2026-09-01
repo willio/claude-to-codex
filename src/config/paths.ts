@@ -2,7 +2,7 @@ import os from "node:os";
 import path from "node:path";
 import fs from "node:fs";
 
-// The directory name predates the product rename to "Claude to Codex (C2C)"
+// The directory name predates the product rename to "Chat to Codex (C2C)"
 // and is kept as an identifier so existing installations keep their state.
 export const STATE_DIR_NAME = "codex-with-claude";
 export const LEGACY_STATE_DIR_NAME = "codex-with-chatgpt";
