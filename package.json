@@ -1,6 +1,6 @@
 {
   "name": "chat-to-codex",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Claude thinks. Codex works. Use Claude Web as the planning and review brain while keeping the Codex harness.",
   "type": "module",
   "license": "MIT",
