@@ -94,6 +94,30 @@ c2c pair
 
 That's the only Claude-side setup.
 
+### Connect ChatGPT — optional second brain
+
+ChatGPT Plus shares the same broker: both brains read the same registered
+workspaces, each with its own token. (Free ChatGPT has no custom connectors.)
+
+Manage connectors on **chatgpt.com in a browser** — the macOS app hides the
+settings.
+
+1. Enable Developer mode: **Settings → Connectors** → scroll to **Advanced
+   settings** → toggle **Developer mode (beta)**.
+2. On the **Plugins** page, the **+** button opens the **New Plugin** dialog:
+   - **Name**: `Chat to Codex`
+   - **Connection**: keep **Server URL** selected and enter the same `/mcp`
+     URL from setup (Streamable HTTP — no `/sse` suffix needed)
+   - **Authentication**: **OAuth** — leave the *Advanced OAuth settings*
+     client ID **empty**; ChatGPT registers itself dynamically
+   - Tick the risk acknowledgment → **Create**
+3. ChatGPT shows **Authenticate** → the C2C authorization page opens → run
+   `c2c broker pair` and enter the fresh code.
+4. **Keep the ChatGPT tab in the foreground** until it finishes connecting —
+   backgrounded tabs throttle the token exchange and the connection stalls.
+5. Enable the connector via the **+** menu and ask ChatGPT to call
+   `list_workspaces`.
+
 ### Add another project
 
 ```bash
