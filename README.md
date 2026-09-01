@@ -1,8 +1,8 @@
-# Claude to Codex (C2C)
+# Chat to Codex (C2C)
 
 **English** | [Bahasa Indonesia](README.id.md) | [简体中文](README.zh-CN.md)
 
-Use Claude Web to plan, reason, and review. Let Codex execute — connected through a secure, read-only MCP bridge.
+Bring your AI chat sessions to Codex. Claude Web, ChatGPT, or any chat that speaks remote MCP plans, reasons, and reviews — Codex executes, connected through a secure, read-only MCP bridge.
 
 **No Claude API key. No reverse proxy.** Claude connects to an OAuth-protected remote MCP endpoint and reads only the workspace data it needs.
 
@@ -12,6 +12,14 @@ Use Claude Web to plan, reason, and review. Let Codex execute — connected thro
 - **Local-first.** Your source code stays on your machine and is exposed only through explicit, read-only MCP requests.
 
 Based on [codex-with-chatgpt](https://github.com/XiaoDuoYa/codex-with-chatgpt).
+
+## Multiple chat brains
+
+One installation serves several AI chats at once. Connect Claude Web,
+ChatGPT (Plus — Developer mode → Connectors → Create → paste the `/mcp`
+URL → OAuth → pairing code), or both: each holds its own token against
+the installation and reads the same registered workspaces. None of them
+can write, execute, or commit — Codex stays the only hands.
 
 ## How it works
 
@@ -42,8 +50,8 @@ Every Claude-facing capability is read-only. Workspaces are registered locally b
 Requirements: Node.js ≥ 20, `git`, `cloudflared`, and Claude Web with custom connector support.
 
 ```bash
-git clone https://github.com/willio/claude-to-codex.git
-cd claude-to-codex
+git clone https://github.com/willio/chat-to-codex.git
+cd chat-to-codex
 pnpm install
 pnpm build
 node bin/c2c.js install   # systemwide install: ~/.c2c (app + state + launcher)
@@ -52,8 +60,8 @@ node bin/c2c.js install   # systemwide install: ~/.c2c (app + state + launcher)
 Install the Codex skill:
 
 ```bash
-mkdir -p ~/.codex/skills/claude-to-codex
-cp skill/SKILL.md ~/.codex/skills/claude-to-codex/
+mkdir -p ~/.codex/skills/chat-to-codex
+cp skill/SKILL.md ~/.codex/skills/chat-to-codex/
 ```
 
 ### Connect Claude — once
@@ -102,6 +110,8 @@ c2c broker tunnel choose --mode named --zone <domain>
 ```
 
 A stable endpoint is recommended for the single connector you keep in Claude. Quick Tunnels remain useful for development and temporary testing.
+
+Advanced: failover profiles. `--profile <name>` runs an isolated installation (own state, identity, connector) under `~/.c2c/profiles/<name>/` — e.g. a second Claude account on `c2c --profile backup broker start --tunnel`.
 
 ## The loop
 
@@ -182,7 +192,7 @@ For compatibility, `doctor --json` exposes the canonical `connectorRepair` field
 
 ## Compatibility
 
-Claude to Codex began from the ideas and architecture of `codex-with-chatgpt` and has since evolved into an independent implementation.
+Chat to Codex began from the ideas and architecture of `codex-with-chatgpt` and has since evolved into an independent implementation.
 
 The current architecture uses one installation-level Claude connector serving multiple locally registered Codex workspaces.
 
@@ -219,11 +229,11 @@ docs/             architecture, protocol, security and migration
 
 ## Credits
 
-Claude to Codex builds on the original idea and architecture of [codex-with-chatgpt](https://github.com/XiaoDuoYa/codex-with-chatgpt) by [@XiaoDuoYa](https://github.com/XiaoDuoYa).
+Chat to Codex builds on the original idea and architecture of [codex-with-chatgpt](https://github.com/XiaoDuoYa/codex-with-chatgpt) by [@XiaoDuoYa](https://github.com/XiaoDuoYa).
 
 The project has since diverged into an independent Claude Web implementation, while preserving attribution to the upstream work and its MIT copyright in [LICENSE](LICENSE).
 
-Claude to Codex is an unofficial community project and is not affiliated with or endorsed by Anthropic or OpenAI.
+Chat to Codex is an unofficial community project and is not affiliated with or endorsed by Anthropic or OpenAI.
 
 ## License
 

@@ -159,7 +159,7 @@ async function ensureBridgeAndTunnel(
 
 program
   .name("c2c")
-  .description(`${PRODUCT_NAME} — Claude thinks. Codex works.`)
+  .description(`${PRODUCT_NAME} — Bring your AI chat sessions to Codex.`)
   .version(VERSION, "-v, --version")
   .option("--profile <name>", "operate an isolated installation (~/.c2c/profiles/<name>)")
   .hook("preAction", () => {
@@ -1162,7 +1162,7 @@ planCmd
 
 program
   .command("install")
-  .description("Install Claude to Codex systemwide under ~/.c2c: app, state migration, launcher, skill")
+  .description("Install Chat to Codex systemwide under ~/.c2c: app, state migration, launcher, skill")
   .option("--json", "machine-readable output", false)
   .action(async (opts: { json: boolean }) => {
     try {
@@ -1214,7 +1214,7 @@ program
       }
 
       // 4. Codex skill
-      const skillDir = path.join(os.homedir(), ".codex", "skills", "claude-to-codex");
+      const skillDir = path.join(os.homedir(), ".codex", "skills", "chat-to-codex");
       fs.mkdirSync(skillDir, { recursive: true, mode: 0o755 });
       fs.copyFileSync(path.join(appRoot, "skill", "SKILL.md"), path.join(skillDir, "SKILL.md"));
 

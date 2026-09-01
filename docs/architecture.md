@@ -30,7 +30,7 @@
 
 ## Principles
 
-- **Claude thinks. Codex works.** The bridge never re-implements a coding harness.
+- **Bring your AI chat sessions to Codex.** The bridge never re-implements a coding harness.
 - **Conversation = control plane**: tiny `[C2C]` state messages (< 1 KB).
 - **MCP = data plane**: Claude pulls files/diffs/search results itself.
 - **Read-only by design**: no write/exec tools exist in V1 at all.

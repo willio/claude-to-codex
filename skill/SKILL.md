@@ -1,16 +1,16 @@
 ---
-name: claude-to-codex
+name: chat-to-codex
 description: >
-  Use Claude Web as the planning and review brain for Codex coding sessions while Codex keeps execution ownership.
+  Bring your AI chat sessions (Claude Web, ChatGPT) to Codex as the planning and review brain while Codex keeps execution ownership.
 ---
 
-# Claude to Codex
+# Chat to Codex
 
-Claude thinks. Codex works.
+Bring your AI chat sessions to Codex.
 
 ## Core boundary
 
-- Claude may read the current workspace only through the C2C MCP connector.
+- The chat brain (Claude Web, ChatGPT) may read the current workspace only through the C2C MCP connector.
 - Codex owns file edits, shell commands, git operations, tests, recovery, and all other mutation.
 - Never add a general-purpose write or command-execution MCP tool.
 - Never paste file contents, diffs, or long logs into Claude when Claude can retrieve them through MCP.
