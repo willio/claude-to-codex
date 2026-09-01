@@ -26,7 +26,7 @@ where the principal is the C2C installation (`c2c_inst_…`).
 To upgrade without deleting legacy files:
 
 ```bash
-c2c broker migrate-auth
+c2c broker migrate-auth — merges legacy per-workspace tokens into the installation store; restarts the broker when running so migrated tokens are recognized immediately.
 ```
 
 This copies live client registrations and unexpired tokens into the
