@@ -161,6 +161,11 @@ program
   .name("c2c")
   .description(`${PRODUCT_NAME} — Claude thinks. Codex works.`)
   .version(VERSION, "-v, --version")
+  .option("--profile <name>", "operate an isolated installation (~/.c2c/profiles/<name>)")
+  .hook("preAction", () => {
+    const profile = (program.opts().profile as string | undefined)?.trim();
+    if (profile) process.env.C2C_PROFILE = profile;
+  })
   .configureHelp({ sortSubcommands: true });
 
 // ---------------------------------------------------------------- serve (internal)

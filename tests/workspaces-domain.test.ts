@@ -263,3 +263,29 @@ describe("state dir precedence", () => {
     }
   });
 });
+
+describe("profile state resolution", () => {
+  it("routes state to ~/.c2c/profiles/<name> via C2C_PROFILE", async () => {
+    const { getStateDir, getC2cHome } = await import("../src/config/paths.js");
+    delete process.env.C2C_STATE_DIR;
+    process.env.C2C_PROFILE = "wiriawan-gmail";
+    try {
+      expect(getStateDir()).toBe(path.join(getC2cHome(), "profiles", "wiriawan-gmail"));
+    } finally {
+      delete process.env.C2C_PROFILE;
+    }
+  });
+
+  it("keeps C2C_STATE_DIR stronger than C2C_PROFILE", async () => {
+    const { getStateDir } = await import("../src/config/paths.js");
+    const scratch = makeTmpDir("profile-scratch");
+    process.env.C2C_STATE_DIR = scratch;
+    process.env.C2C_PROFILE = "wiriawan-gmail";
+    try {
+      expect(getStateDir()).toBe(scratch);
+    } finally {
+      delete process.env.C2C_STATE_DIR;
+      delete process.env.C2C_PROFILE;
+    }
+  });
+});

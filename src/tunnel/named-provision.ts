@@ -188,6 +188,7 @@ export async function provisionNamedTunnel(opts: {
   workspaceName: string;
   zone: string;
   hostname?: string;
+  tunnelName?: string;
   account?: CloudflaredAccount;
 }): Promise<ProvisionNamedResult> {
   const account = opts.account ?? new ProcessCloudflaredAccount();
@@ -200,7 +201,7 @@ export async function provisionNamedTunnel(opts: {
     return fallbackState(opts.workspaceId, "invalid_hostname", (error as Error).message);
   }
 
-  const tunnelName = `c2c-${opts.workspaceId}`;
+  const tunnelName = opts.tunnelName ?? `c2c-${opts.workspaceId}`;
   try {
     if (!account.hasCert()) await account.login();
     const tunnel = await account.createTunnel(tunnelName);
