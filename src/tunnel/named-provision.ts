@@ -157,7 +157,9 @@ export class ProcessCloudflaredAccount implements CloudflaredAccount {
   }
 
   async routeDns(tunnelName: string, hostname: string): Promise<void> {
-    const result = this.run(["tunnel", "route", "dns", tunnelName, hostname]);
+    // --overwrite-dns repoints an existing CNAME at this tunnel; without it a
+    // stale record silently keeps serving a dead tunnel.
+    const result = this.run(["tunnel", "route", "dns", "--overwrite-dns", tunnelName, hostname]);
     if (result.ok || isBenignRouteError(`${result.stdout}\n${result.stderr}`)) return;
     throw new Error(result.stderr || result.stdout || `Unable to route ${hostname}`);
   }
